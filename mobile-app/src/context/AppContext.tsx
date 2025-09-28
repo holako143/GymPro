@@ -9,6 +9,8 @@ export interface SessionData {
     difficulty: 'very-easy' | 'easy' | 'medium' | 'hard' | 'very-hard';
     date: string;
     duration: number;
+    oneRM: number;
+    volume: number;
 }
 
 export interface Exercise {
@@ -19,7 +21,7 @@ export interface Exercise {
     restTime: number;
     completedSessions: number;
     currentSession: number;
-    status: 'pending' | 'in-progress' | 'resting' | 'completed';
+    status: 'pending' | 'in-progress' | 'resting' | 'completed' | 'paused';
     sessionData: Record<number, SessionData>;
     exerciseSeconds: number;
     restSeconds: number;
@@ -32,15 +34,45 @@ export interface TrainingPlan {
     exercises: number[];
 }
 
+export interface Notification {
+    id: number;
+    title: string;
+    time: string;
+    enabled: boolean;
+}
+
+export interface PlannedWorkout {
+    id: number;
+    date: string; // YYYY-MM-DD
+    planId: number;
+}
+
+export interface Settings {
+    primaryColor: string;
+    secondaryColor: string;
+    restOverdueAudio: boolean;
+}
+
+export interface SessionHistoryItem {
+    id: number;
+    exerciseId: number;
+    sessionNumber: number;
+    data: SessionData;
+}
+
 export interface AppState {
     activePage: string;
     exercises: Exercise[];
     trainingPlans: TrainingPlan[];
+    notifications: Notification[];
+    plannedWorkouts: PlannedWorkout[];
+    sessionHistory: SessionHistoryItem[];
+    settings: Settings;
     activePlanId: number | null;
     currentExerciseId: number | null;
     sessionStartTime: number | null;
     isModalOpen: Record<string, boolean>;
-    modalContext: { exerciseId?: number; planId?: number };
+    modalContext: { exerciseId?: number; planId?: number; date?: string };
     globalSessionSeconds: number;
 }
 
@@ -49,10 +81,18 @@ export const initialState: AppState = {
     activePage: 'current-exercise',
     exercises: [],
     trainingPlans: [],
+    notifications: [],
+    plannedWorkouts: [],
+    sessionHistory: [],
+    settings: {
+        primaryColor: '#4361ee',
+        secondaryColor: '#3f37c9',
+        restOverdueAudio: true,
+    },
     activePlanId: null,
     currentExerciseId: null,
     sessionStartTime: null,
-    isModalOpen: { exercise: false, plan: false, finishSession: false },
+    isModalOpen: { exercise: false, plan: false, finishSession: false, planForDate: false, sessionDetails: false },
     modalContext: {},
     globalSessionSeconds: 0,
 };
@@ -65,15 +105,21 @@ export type Action =
     | { type: 'ADD_OR_UPDATE_EXERCISE'; payload: Partial<Exercise> }
     | { type: 'DELETE_EXERCISE'; payload: number }
     | { type: 'ADD_OR_UPDATE_PLAN'; payload: Partial<TrainingPlan> }
+    | { type: 'DELETE_PLAN'; payload: number }
     | { type: 'ACTIVATE_PLAN'; payload: number | null }
+    | { type: 'RESET_WORKOUT' }
     | { type: 'START_GLOBAL_SESSION' }
     | { type: 'STOP_GLOBAL_SESSION' }
     | { type: 'TICK_GLOBAL_TIMER' }
     | { type: 'START_EXERCISE_TIMER'; payload: number }
     | { type: 'PAUSE_EXERCISE_TIMER'; payload: number }
+    | { type: 'RESUME_EXERCISE_TIMER'; payload: number }
     | { type: 'TICK_EXERCISE_SECONDS'; payload: { exerciseId: number } }
     | { type: 'TICK_REST_SECONDS'; payload: { exerciseId: number } }
-    | { type: 'FINISH_SESSION'; payload: { exerciseId: number; sessionData: Omit<SessionData, 'date' | 'duration'> } }
+    | { type: 'FINISH_SESSION'; payload: { exerciseId: number; sessionData: Omit<SessionData, 'date' | 'duration' | 'oneRM' | 'volume'> } }
+    | { type: 'ADD_OR_UPDATE_PLANNED_WORKOUT'; payload: PlannedWorkout }
+    | { type: 'DELETE_PLANNED_WORKOUT'; payload: number }
+    | { type: 'UPDATE_SETTINGS'; payload: Partial<Settings> }
     | { type: 'OPEN_MODAL'; payload: { modal: string; isOpen: boolean; context?: any } };
 
 // --- REDUCER ---
@@ -83,7 +129,8 @@ const appReducer = (state: AppState, action: Action): AppState => {
             return { ...state, ...action.payload, sessionStartTime: null };
 
         case 'LOAD_DEFAULT_DATA':
-            return { ...state, ...initialDefaultData };
+            const data = initialDefaultData as Partial<AppState>;
+            return { ...state, ...data };
 
         case 'SET_PAGE':
             return { ...state, activePage: action.payload };
@@ -120,9 +167,22 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
 
         case 'DELETE_EXERCISE': {
-            const newExercises = state.exercises.filter(ex => ex.id !== action.payload);
-            const newPlans = state.trainingPlans.map(plan => ({...plan, exercises: plan.exercises.filter(exId => exId !== action.payload)}));
-            return { ...state, exercises: newExercises, trainingPlans: newPlans };
+            const exerciseIdToDelete = action.payload;
+            const newExercises = state.exercises.filter(ex => ex.id !== exerciseIdToDelete);
+            const newPlans = state.trainingPlans.map(plan => ({...plan, exercises: plan.exercises.filter(exId => exId !== exerciseIdToDelete)}));
+            const newHistory = state.sessionHistory.filter(item => item.exerciseId !== exerciseIdToDelete);
+            return { ...state, exercises: newExercises, trainingPlans: newPlans, sessionHistory: newHistory };
+        }
+
+        case 'DELETE_PLAN': {
+            const planIdToDelete = action.payload;
+            const newPlans = state.trainingPlans.filter(p => p.id !== planIdToDelete);
+            const newPlannedWorkouts = state.plannedWorkouts.filter(pw => pw.planId !== planIdToDelete);
+            let newActivePlanId = state.activePlanId;
+            if (state.activePlanId === planIdToDelete) {
+                newActivePlanId = null;
+            }
+            return { ...state, trainingPlans: newPlans, plannedWorkouts: newPlannedWorkouts, activePlanId: newActivePlanId };
         }
 
         case 'ACTIVATE_PLAN': {
@@ -131,6 +191,13 @@ const appReducer = (state: AppState, action: Action): AppState => {
             }));
             const activePlan = state.trainingPlans.find(p => p.id === action.payload);
             return { ...state, activePlanId: action.payload, exercises: exercisesWithResetState, currentExerciseId: activePlan?.exercises[0] || null };
+        }
+
+        case 'RESET_WORKOUT': {
+             const exercisesWithResetState = state.exercises.map(ex => ({
+                ...ex, status: 'pending', completedSessions: 0, currentSession: 1, sessionData: {}, exerciseSeconds: 0, restSeconds: 0,
+            }));
+            return { ...state, exercises: exercisesWithResetState, currentExerciseId: state.exercises[0]?.id || null };
         }
 
         case 'START_GLOBAL_SESSION':
@@ -146,7 +213,10 @@ const appReducer = (state: AppState, action: Action): AppState => {
             return { ...state, currentExerciseId: action.payload, exercises: state.exercises.map(ex => ex.id === action.payload ? { ...ex, status: 'in-progress', restSeconds: 0 } : ex) };
 
         case 'PAUSE_EXERCISE_TIMER':
-            return { ...state, exercises: state.exercises.map(ex => ex.id === action.payload ? { ...ex, status: 'resting', restSeconds: ex.restTime } : ex) };
+            return { ...state, exercises: state.exercises.map(ex => ex.id === action.payload ? { ...ex, status: 'paused' } : ex) };
+
+        case 'RESUME_EXERCISE_TIMER':
+             return { ...state, exercises: state.exercises.map(ex => ex.id === action.payload ? { ...ex, status: 'in-progress' } : ex) };
 
         case 'TICK_EXERCISE_SECONDS':
             return { ...state, exercises: state.exercises.map(ex => ex.id === action.payload.exerciseId ? { ...ex, exerciseSeconds: ex.exerciseSeconds + 1 } : ex) };
@@ -164,16 +234,39 @@ const appReducer = (state: AppState, action: Action): AppState => {
         case 'FINISH_SESSION': {
             const { exerciseId, sessionData } = action.payload;
             let nextExerciseId = state.currentExerciseId;
+            let finishedExercise: Exercise | undefined;
+            let newHistory = [...state.sessionHistory];
+
             const exercisesWithFinishedSession = state.exercises.map(ex => {
                 if (ex.id === exerciseId) {
+                    finishedExercise = ex;
                     const newCompleted = ex.completedSessions + 1;
                     const isWorkoutComplete = newCompleted >= ex.sessions;
+                    const oneRM = Math.round(sessionData.weight * (1 + (sessionData.reps / 30)));
+                    const volume = sessionData.weight * sessionData.reps;
+
+                    const newSessionData: SessionData = {
+                        ...sessionData,
+                        date: new Date().toISOString(),
+                        duration: ex.exerciseSeconds,
+                        oneRM,
+                        volume
+                    };
+
+                    const nextHistoryId = Math.max(0, ...newHistory.map(h => h.id)) + 1;
+                    newHistory.push({
+                        id: nextHistoryId,
+                        exerciseId: ex.id,
+                        sessionNumber: ex.currentSession,
+                        data: newSessionData
+                    });
+
                     return {
                         ...ex,
                         completedSessions: newCompleted,
                         currentSession: ex.currentSession + 1,
                         status: isWorkoutComplete ? 'completed' : 'resting',
-                        sessionData: { ...ex.sessionData, [ex.currentSession]: { ...sessionData, date: new Date().toISOString(), duration: ex.exerciseSeconds } },
+                        sessionData: { ...ex.sessionData, [ex.currentSession]: newSessionData },
                         exerciseSeconds: 0,
                         restSeconds: isWorkoutComplete ? 0 : ex.restTime,
                     };
@@ -182,17 +275,42 @@ const appReducer = (state: AppState, action: Action): AppState => {
             });
 
             const currentPlan = state.trainingPlans.find(p => p.id === state.activePlanId);
-            if (currentPlan) {
-                const currentIndex = currentPlan.exercises.indexOf(exerciseId);
-                const nextInPlan = currentPlan.exercises[currentIndex + 1];
-                if(nextInPlan) {
-                    nextExerciseId = nextInPlan;
+            if (currentPlan && finishedExercise) {
+                const currentIndex = currentPlan.exercises.indexOf(finishedExercise.id);
+                const nextInPlanIndex = currentPlan.exercises.findIndex((id, index) => {
+                    if (index <= currentIndex) return false;
+                    const nextEx = exercisesWithFinishedSession.find(e => e.id === id);
+                    return nextEx && nextEx.status !== 'completed';
+                });
+
+                if (nextInPlanIndex !== -1) {
+                    nextExerciseId = currentPlan.exercises[nextInPlanIndex];
                 } else {
                     nextExerciseId = null; // End of plan
                 }
             }
-            return { ...state, exercises: exercisesWithFinishedSession, currentExerciseId: nextExerciseId };
+            return { ...state, exercises: exercisesWithFinishedSession, sessionHistory: newHistory, currentExerciseId: nextExerciseId };
         }
+
+        case 'ADD_OR_UPDATE_PLANNED_WORKOUT': {
+            const newPlannedWorkouts = [...state.plannedWorkouts];
+            const index = newPlannedWorkouts.findIndex(pw => pw.id === action.payload.id || pw.date === action.payload.date);
+            if (index > -1) {
+                newPlannedWorkouts[index] = action.payload;
+            } else {
+                const nextId = Math.max(0, ...newPlannedWorkouts.map(p => p.id)) + 1;
+                newPlannedWorkouts.push({ ...action.payload, id: nextId });
+            }
+            return { ...state, plannedWorkouts: newPlannedWorkouts };
+        }
+
+        case 'DELETE_PLANNED_WORKOUT': {
+            const newPlannedWorkouts = state.plannedWorkouts.filter(pw => pw.id !== action.payload);
+            return { ...state, plannedWorkouts: newPlannedWorkouts };
+        }
+
+        case 'UPDATE_SETTINGS':
+            return { ...state, settings: { ...state.settings, ...action.payload } };
 
         case 'OPEN_MODAL':
             return { ...state, isModalOpen: { ...state.isModalOpen, [action.payload.modal]: action.payload.isOpen }, modalContext: action.payload.isOpen ? { ...action.payload.context } : {} };

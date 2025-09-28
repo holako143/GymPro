@@ -1,20 +1,70 @@
 "use client";
-import React from 'react';
+import React, { useRef } from 'react';
 import { useAppContext } from '@/context/AppContext';
+import { AnalyticsCard } from '../analytics/AnalyticsCard';
 
-export const SettingsPage: React.FC = () => {
+export const SettingsPage = () => {
     const { state, dispatch } = useAppContext();
     const { settings } = state;
+    const importFileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleColorChange = (key: string, value: string) => {
-        // In a real app, you would dispatch an action to update the settings
-        // dispatch({ type: 'UPDATE_SETTINGS', payload: { [key]: value } });
-        console.log(`Setting ${key} to ${value}`);
+    const handleSettingChange = (key: string, value: any) => {
+        dispatch({ type: 'UPDATE_SETTINGS', payload: { [key]: value } });
     };
 
-    const handleAudioToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
-        // dispatch({ type: 'UPDATE_SETTINGS', payload: { restOverdueAudio: e.target.checked } });
-        console.log(`Audio toggle to ${e.target.checked}`);
+    const handleExport = () => {
+        try {
+            const stateToSave = { ...state };
+            // Remove non-serializable parts from the state
+            delete stateToSave.isModalOpen;
+            delete stateToSave.modalContext;
+            delete stateToSave.sessionStartTime;
+
+            const dataStr = JSON.stringify(stateToSave, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "fitness_app_backup.json";
+            a.click();
+            URL.revokeObjectURL(url);
+            alert("تم تصدير البيانات بنجاح!");
+        } catch (error) {
+            console.error("Failed to export data:", error);
+            alert("حدث خطأ أثناء تصدير البيانات.");
+        }
+    };
+
+    const handleImportClick = () => {
+        importFileInputRef.current?.click();
+    };
+
+    const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const text = e.target?.result;
+                if (typeof text === 'string') {
+                    const importedState = JSON.parse(text);
+                    // Basic validation
+                    if (importedState.exercises && importedState.settings) {
+                        dispatch({ type: 'SET_INITIAL_STATE', payload: importedState });
+                        alert("تم استيراد البيانات بنجاح! سيتم إعادة تحميل التطبيق.");
+                        // Optionally force a reload to ensure all components reset correctly
+                        window.location.reload();
+                    } else {
+                        throw new Error("Invalid file format");
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to import data:", error);
+                alert("فشل استيراد البيانات. يرجى التأكد من أن الملف صحيح.");
+            }
+        };
+        reader.readAsText(file);
     };
 
     return (
@@ -22,63 +72,59 @@ export const SettingsPage: React.FC = () => {
             <div className="container">
                 <h2 style={{ margin: '20px 0' }}>الإعدادات</h2>
 
-                <div className="analytics-card">
-                    <div className="analytics-title">تخصيص الواجهة</div>
+                <AnalyticsCard title="تخصيص الواجهة">
                     <div className="settings-section-title">ألوان التطبيق</div>
                     <div className="form-group color-picker-group">
                         <label className="form-label">اللون الأساسي</label>
                         <input
                             type="color"
-                            id="primary-color-picker"
-                            value={settings?.primaryColor || '#4361ee'}
-                            onChange={(e) => handleColorChange('primaryColor', e.target.value)}
+                            value={settings.primaryColor}
+                            onChange={(e) => handleSettingChange('primaryColor', e.target.value)}
                         />
                     </div>
                     <div className="form-group color-picker-group">
                         <label className="form-label">اللون الثانوي</label>
                         <input
                             type="color"
-                            id="secondary-color-picker"
-                            value={settings?.secondaryColor || '#3f37c9'}
-                            onChange={(e) => handleColorChange('secondaryColor', e.target.value)}
+                            value={settings.secondaryColor}
+                            onChange={(e) => handleSettingChange('secondaryColor', e.target.value)}
                         />
                     </div>
+                </AnalyticsCard>
 
-                    <div className="settings-section-title">تفضيلات الإشعارات</div>
-                    <div className="notification-item">
+                <AnalyticsCard title="تفضيلات الإشعارات">
+                     <div className="notification-item">
                         <div className="notification-info">
                             <div className="notification-title">تنبيه صوتي لتجاوز الراحة</div>
                         </div>
                         <label className="notification-toggle">
                             <input
                                 type="checkbox"
-                                id="rest-overdue-audio-toggle"
-                                checked={settings?.restOverdueAudio || false}
-                                onChange={handleAudioToggle}
+                                checked={settings.restOverdueAudio}
+                                onChange={(e) => handleSettingChange('restOverdueAudio', e.target.checked)}
                             />
                             <span className="notification-slider"></span>
                         </label>
                     </div>
+                </AnalyticsCard>
 
-                    <div className="settings-section-title">وحدات القياس</div>
-                    <p style={{ color: 'var(--gray)', fontSize: '0.9em', marginBottom: '10px' }}>تبديل بين كيلوجرام ورطل. (قريباً!)</p>
-
-                     <div className="settings-section-title">إعادة ترتيب التمارين</div>
-                     <p style={{ color: 'var(--gray)', fontSize: '0.9em', marginBottom: '10px' }}>القدرة على إعادة ترتيب التمارين داخل خطط التدريب. (قريباً!)</p>
-                </div>
-
-                <div className="analytics-card" style={{ marginTop: '15px' }}>
-                    <div className="analytics-title">إدارة البيانات</div>
+                <AnalyticsCard title="إدارة البيانات">
                     <div style={{ display: 'flex', gap: '15px', marginTop: '15px' }}>
-                        <button className="add-exercise-btn" id="export-data-btn" style={{ backgroundColor: 'var(--info)', flex: 1 }}>
+                        <button onClick={handleExport} className="add-exercise-btn" style={{ backgroundColor: 'var(--info)', flex: 1 }}>
                             <i className="fas fa-file-export"></i> تصدير البيانات
                         </button>
-                        <input type="file" id="import-file-input" accept=".json" style={{ display: 'none' }} />
-                        <button className="add-exercise-btn" id="import-data-btn" style={{ backgroundColor: 'var(--secondary)', flex: 1 }}>
+                        <input
+                            type="file"
+                            ref={importFileInputRef}
+                            onChange={handleFileImport}
+                            accept=".json"
+                            style={{ display: 'none' }}
+                        />
+                        <button onClick={handleImportClick} className="add-exercise-btn" style={{ backgroundColor: 'var(--secondary)', flex: 1 }}>
                             <i className="fas fa-file-import"></i> استيراد البيانات
                         </button>
                     </div>
-                </div>
+                </AnalyticsCard>
             </div>
         </div>
     );

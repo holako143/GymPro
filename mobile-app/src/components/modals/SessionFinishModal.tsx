@@ -1,32 +1,23 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { useAppContext, Exercise } from '@/context/AppContext';
+import { useAppContext } from '@/context/AppContext';
 
-export const SessionFinishModal: React.FC = () => {
+export const SessionFinishModal = () => {
     const { state, dispatch } = useAppContext();
-    const { isModalOpen, exercises, modalContext } = state;
+    const { isModalOpen, modalContext, exercises } = state;
 
-    const exerciseToFinish = exercises.find(ex => ex.id === modalContext.exerciseId);
-
-    const [weight, setWeight] = useState(20);
-    const [reps, setReps] = useState(10);
+    const [weight, setWeight] = useState('');
+    const [reps, setReps] = useState('');
     const [difficulty, setDifficulty] = useState('');
 
     useEffect(() => {
-        if (exerciseToFinish) {
-            const lastSessionNum = exerciseToFinish.currentSession - 1;
-            const lastSession = exerciseToFinish.sessionData[lastSessionNum];
-            if (lastSession) {
-                setWeight(lastSession.weight);
-                setReps(lastSession.reps);
-            } else {
-                setWeight(20);
-                setReps(10);
-            }
+        if (isModalOpen.finishSession && modalContext.exerciseId) {
+            // Reset fields when modal opens
+            setWeight('20'); // Default value
+            setReps('10');   // Default value
+            setDifficulty('');
         }
-        setDifficulty(''); // Reset difficulty each time modal opens
-    }, [modalContext.exerciseId, exerciseToFinish]);
-
+    }, [isModalOpen.finishSession, modalContext.exerciseId]);
 
     const handleClose = () => {
         dispatch({ type: 'OPEN_MODAL', payload: { modal: 'finishSession', isOpen: false } });
@@ -35,54 +26,58 @@ export const SessionFinishModal: React.FC = () => {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!difficulty) {
-            alert('يرجى اختيار مستوى الصعوبة');
+            alert('يرجى اختيار مستوى الصعوبة.');
             return;
         }
-        if (!exerciseToFinish) return;
-
         dispatch({
             type: 'FINISH_SESSION',
             payload: {
-                exerciseId: exerciseToFinish.id,
-                sessionData: { weight, reps, difficulty: difficulty as any },
+                exerciseId: modalContext.exerciseId!,
+                sessionData: {
+                    weight: parseInt(weight),
+                    reps: parseInt(reps),
+                    difficulty: difficulty as any,
+                },
             },
         });
         handleClose();
     };
 
-    if (!isModalOpen.finishSession || !exerciseToFinish) {
-        return null;
-    }
+    if (!isModalOpen.finishSession) return null;
 
     const difficultyOptions = [
-        { value: 'very-easy', emoji: '😊', label: 'سهل جداً' },
-        { value: 'easy', emoji: '🙂', label: 'سهل' },
-        { value: 'medium', emoji: '😐', label: 'متوسط' },
-        { value: 'hard', emoji: '😟', label: 'ثقيل' },
-        { value: 'very-hard', emoji: '😫', label: 'ثقيل جداً' },
+        { key: 'very-easy', emoji: '😊', label: 'سهل جداً' },
+        { key: 'easy', emoji: '🙂', label: 'سهل' },
+        { key: 'medium', emoji: '😐', label: 'متوسط' },
+        { key: 'hard', emoji: '😟', label: 'ثقيل' },
+        { key: 'very-hard', emoji: '😫', label: 'ثقيل جداً' },
     ];
 
     return (
         <div className="modal active">
             <div className="modal-content">
                 <div className="modal-header">
-                    <div className="modal-title">إنهاء الجلسة: {exerciseToFinish.name}</div>
+                    <div className="modal-title">إنهاء الجلسة</div>
                     <button className="modal-close" onClick={handleClose}>&times;</button>
                 </div>
                 <form onSubmit={handleSubmit}>
                     <div className="form-group">
                         <label className="form-label" htmlFor="session-weight">الوزن المستخدم (كجم)</label>
-                        <input type="number" className="form-input" id="session-weight" value={weight} onChange={(e) => setWeight(Number(e.target.value))} min="1" required />
+                        <input type="number" className="form-input" id="session-weight" value={weight} onChange={(e) => setWeight(e.target.value)} required min="0" />
                     </div>
                     <div className="form-group">
                         <label className="form-label" htmlFor="session-reps">عدد العدات</label>
-                        <input type="number" className="form-input" id="session-reps" value={reps} onChange={(e) => setReps(Number(e.target.value))} min="1" required />
+                        <input type="number" className="form-input" id="session-reps" value={reps} onChange={(e) => setReps(e.target.value)} required min="1" />
                     </div>
                     <div className="form-group">
                         <label className="form-label">مستوى الصعوبة</label>
                         <div className="difficulty-options">
                             {difficultyOptions.map(opt => (
-                                <div key={opt.value} className={`difficulty-option ${difficulty === opt.value ? 'selected ' + opt.value : ''}`} onClick={() => setDifficulty(opt.value)}>
+                                <div
+                                    key={opt.key}
+                                    className={`difficulty-option ${opt.key} ${difficulty === opt.key ? 'selected' : ''}`}
+                                    onClick={() => setDifficulty(opt.key)}
+                                >
                                     <div className="difficulty-emoji-large">{opt.emoji}</div>
                                     <div className="difficulty-label">{opt.label}</div>
                                 </div>
@@ -91,7 +86,7 @@ export const SessionFinishModal: React.FC = () => {
                     </div>
                     <div className="form-actions">
                         <button type="button" className="btn btn-secondary" onClick={handleClose}>إلغاء</button>
-                        <button type="submit" className="btn btn-primary">حفظ الجلسة</button>
+                        <button type="submit" className="btn btn-primary">حفظ</button>
                     </div>
                 </form>
             </div>

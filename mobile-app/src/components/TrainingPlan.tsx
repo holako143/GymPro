@@ -1,19 +1,9 @@
+"use client";
 import React from 'react';
-
-interface Plan {
-    id: number;
-    name: string;
-    description: string;
-    exercises: number[];
-}
-
-interface Exercise {
-    id: number;
-    name: string;
-}
+import { TrainingPlan as TrainingPlanType, Exercise } from '@/context/AppContext';
 
 interface TrainingPlanProps {
-    plan: Plan;
+    plan: TrainingPlanType;
     allExercises: Exercise[];
     isActive: boolean;
     onActivate: (id: number | null) => void;
@@ -21,7 +11,7 @@ interface TrainingPlanProps {
     onDelete: (id: number) => void;
 }
 
-const TrainingPlan: React.FC<TrainingPlanProps> = ({ plan, allExercises, isActive, onActivate, onEdit, onDelete }) => {
+export const TrainingPlan: React.FC<TrainingPlanProps> = ({ plan, allExercises, isActive, onActivate, onEdit, onDelete }) => {
     const planExercises = allExercises
         .filter(exercise => plan.exercises.includes(exercise.id))
         .map(exercise => exercise.name);
@@ -45,8 +35,8 @@ const TrainingPlan: React.FC<TrainingPlanProps> = ({ plan, allExercises, isActiv
             <div className="plan-description">{plan.description}</div>
             <div className="plan-exercises">
                 {planExercises.length > 0 ? (
-                    planExercises.map(exerciseName => (
-                        <div key={exerciseName} className="plan-exercise">
+                    planExercises.map((exerciseName, index) => (
+                        <div key={index} className="plan-exercise">
                             <span>{exerciseName}</span>
                         </div>
                     ))

@@ -1,98 +1,101 @@
 "use client";
-import React, { useState, useEffect } from 'react';
-import { useAppContext, TrainingPlan } from '@/context/AppContext';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useAppContext, TrainingPlan, Exercise } from '@/context/AppContext';
 
-export const PlanModal: React.FC = () => {
+export const PlanModal = () => {
     const { state, dispatch } = useAppContext();
     const { isModalOpen, modalContext, exercises, trainingPlans } = state;
 
-    const planToEdit = modalContext.planId ? trainingPlans.find(p => p.id === modalContext.planId) : null;
-
-    const [name, setName] = useState('');
-    const [description, setDescription] = useState('');
-    const [selectedExercises, setSelectedExercises] = useState<Set<number>>(new Set());
+    const [formData, setFormData] = useState({
+        id: undefined,
+        name: '',
+        description: '',
+        exercises: [] as number[],
+    });
 
     useEffect(() => {
-        if (isModalOpen.plan && planToEdit) {
-            setName(planToEdit.name);
-            setDescription(planToEdit.description);
-            setSelectedExercises(new Set(planToEdit.exercises));
+        if (isModalOpen.plan && modalContext.planId) {
+            const plan = trainingPlans.find(p => p.id === modalContext.planId);
+            if (plan) {
+                setFormData({
+                    id: plan.id,
+                    name: plan.name,
+                    description: plan.description,
+                    exercises: [...plan.exercises],
+                });
+            }
         } else {
-            setName('');
-            setDescription('');
-            setSelectedExercises(new Set());
+            setFormData({ id: undefined, name: '', description: '', exercises: [] });
         }
-    }, [isModalOpen.plan, planToEdit]);
+    }, [isModalOpen.plan, modalContext.planId, trainingPlans]);
 
     const handleClose = () => {
         dispatch({ type: 'OPEN_MODAL', payload: { modal: 'plan', isOpen: false } });
     };
 
-    const handleExerciseToggle = (exerciseId: number) => {
-        const newSelection = new Set(selectedExercises);
-        if (newSelection.has(exerciseId)) {
-            newSelection.delete(exerciseId);
-        } else {
-            newSelection.add(exerciseId);
-        }
-        setSelectedExercises(newSelection);
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleCheckboxChange = (exerciseId: number) => {
+        setFormData(prev => {
+            const newExercises = prev.exercises.includes(exerciseId)
+                ? prev.exercises.filter(id => id !== exerciseId)
+                : [...prev.exercises, exerciseId];
+            return { ...prev, exercises: newExercises };
+        });
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!name) {
-            alert("الرجاء إدخال اسم للخطة.");
-            return;
-        }
-
-        const planData = {
-            id: planToEdit ? planToEdit.id : undefined,
-            name,
-            description,
-            exercises: Array.from(selectedExercises),
-        };
-
-        dispatch({ type: 'ADD_OR_UPDATE_PLAN', payload: planData });
+        dispatch({
+            type: 'ADD_OR_UPDATE_PLAN',
+            payload: formData as Partial<TrainingPlan>,
+        });
         handleClose();
     };
 
-    if (!isModalOpen.plan) {
-        return null;
-    }
+    const muscleGroups = useMemo(() => {
+        return exercises.reduce((acc, exercise) => {
+            (acc[exercise.muscle] = acc[exercise.muscle] || []).push(exercise);
+            return acc;
+        }, {} as Record<string, Exercise[]>);
+    }, [exercises]);
 
-    const muscleGroups = [...new Set(exercises.map(ex => ex.muscle))].sort();
+    if (!isModalOpen.plan) return null;
 
     return (
         <div className="modal active">
             <div className="modal-content">
                 <div className="modal-header">
-                    <div className="modal-title">{planToEdit ? 'تعديل الخطة' : 'إنشاء خطة جديدة'}</div>
+                    <div className="modal-title">{formData.id ? 'تعديل الخطة' : 'إنشاء خطة جديدة'}</div>
                     <button className="modal-close" onClick={handleClose}>&times;</button>
                 </div>
                 <form id="plan-form" onSubmit={handleSubmit}>
                     <div className="form-group">
-                        <label className="form-label" htmlFor="plan-name-modal">اسم الخطة</label>
-                        <input type="text" id="plan-name-modal" className="form-input" value={name} onChange={(e) => setName(e.target.value)} required />
+                        <label className="form-label" htmlFor="plan-name">اسم الخطة</label>
+                        <input type="text" className="form-input" id="plan-name" name="name" value={formData.name} onChange={handleChange} required />
                     </div>
                     <div className="form-group">
-                        <label className="form-label" htmlFor="plan-description-modal">وصف الخطة</label>
-                        <textarea id="plan-description-modal" className="form-input" value={description} onChange={(e) => setDescription(e.target.value)} rows={3}></textarea>
+                        <label className="form-label" htmlFor="plan-description">وصف الخطة</label>
+                        <textarea className="form-input" id="plan-description" name="description" value={formData.description} onChange={handleChange} rows={3}></textarea>
                     </div>
                     <div className="form-group">
                         <label className="form-label">التمارين المضمنة</label>
-                        <div id="plan-exercises-list" style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                            {muscleGroups.map(muscle => (
+                        <div id="plan-exercises-list">
+                            {Object.entries(muscleGroups).map(([muscle, exercisesInGroup]) => (
                                 <div key={muscle} className="muscle-group-selector">
                                     <h4>{muscle}</h4>
                                     <div className="muscle-group-exercises">
-                                        {exercises.filter(ex => ex.muscle === muscle).map(exercise => (
+                                        {exercisesInGroup.map(exercise => (
                                             <div key={exercise.id} className="form-group">
                                                 <label className="form-label">
                                                     <input
                                                         type="checkbox"
                                                         value={exercise.id}
-                                                        checked={selectedExercises.has(exercise.id)}
-                                                        onChange={() => handleExerciseToggle(exercise.id)}
+                                                        checked={formData.exercises.includes(exercise.id)}
+                                                        onChange={() => handleCheckboxChange(exercise.id)}
                                                     />
                                                     {exercise.name}
                                                 </label>
@@ -105,7 +108,7 @@ export const PlanModal: React.FC = () => {
                     </div>
                     <div className="form-actions">
                         <button type="button" className="btn btn-secondary" onClick={handleClose}>إلغاء</button>
-                        <button type="submit" className="btn btn-primary">حفظ الخطة</button>
+                        <button type="submit" className="btn btn-primary">حفظ</button>
                     </div>
                 </form>
             </div>
