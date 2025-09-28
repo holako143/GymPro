@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAppContext, Exercise, SessionData, TrainingPlan, initialState } from '@/context/AppContext';
 import { initialDefaultData } from '@/utils/defaultData';
-import { formatTime, getDifficultyEmoji, getDifficultyLabel } from '@/utils/formatters';
+import { formatTime } from '@/utils/formatters';
 
 import ExerciseCard from '@/components/ExerciseCard';
 import TrainingPlan from '@/components/TrainingPlan';
