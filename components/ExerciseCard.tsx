@@ -28,7 +28,6 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isSoundMuted, setIsSoundMuted] = useState(false);
   const [showFinishModal, setShowFinishModal] = useState<boolean>(false);
-  const [showSummary, setShowSummary] = useState<boolean>(false);
   const [showSessionModal, setShowSessionModal] = useState<boolean>(false);
   const [selectedSession, setSelectedSession] = useState<number | null>(null);
   const [weight, setWeight] = useState<string>('20');
@@ -101,12 +100,6 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
   const isRestOverdue = exercise.status === 'resting' && 
     exercise.restSecondsCurrentSession < -15;
 
-  const handleStartExercise = () => {
-    playSoundAndHaptic(Haptics.ImpactFeedbackStyle.Medium);
-    setShowSummary(false);
-    startExerciseTimer(exercise.id);
-  };
-
   const handlePauseResume = () => {
     playSoundAndHaptic();
     if (exercise.status === 'in-progress') {
@@ -129,7 +122,7 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
 
   const handleFinish = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setShowSummary(true);
+    setShowFinishModal(true);
   };
 
   const handleFinishSubmit = () => {
@@ -333,64 +326,33 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
 
       {/* Main Display Area */}
       <View style={styles.mainDisplayContainer}>
-        {showSummary ? (
-          <View style={styles.summaryContainer}>
-            <Text style={styles.summaryTitle}>ملخص الجلسة الحالية</Text>
-            <View style={styles.summaryStatRow}>
-              <Text style={styles.summaryStatLabel}>وقت التمرين:</Text>
-              <Text style={[styles.summaryStatValue, { color: settings.primaryColor }]}>{formatTime(exercise.exerciseSecondsCurrentSession)}</Text>
-            </View>
-            <View style={styles.summaryStatRow}>
-              <Text style={styles.summaryStatLabel}>وقت الراحة:</Text>
-              <Text style={[styles.summaryStatValue, { color: '#f59e0b' }]}>{formatTime(exercise.restSecondsCurrentSession)}</Text>
-            </View>
-            {exercise.wastedTimeSeconds > 0 && (
-              <View style={styles.summaryStatRow}>
-                <Text style={styles.summaryStatLabel}>الوقت الضائع:</Text>
-                <Text style={[styles.summaryStatValue, { color: '#ef4444' }]}>{formatTime(exercise.wastedTimeSeconds)}</Text>
-              </View>
-            )}
-            <TouchableOpacity
-              style={[styles.logSessionButton, { backgroundColor: settings.primaryColor }]}
-              onPress={() => {
-                setShowSummary(false);
-                setShowFinishModal(true);
-              }}
-            >
-              <Text style={styles.logSessionButtonText}>تسجيل الجلسة و المتابعة</Text>
-            </TouchableOpacity>
+        {exercise.status === 'pending' && (
+          <View style={styles.mainTimerContainer}>
+            <Dumbbell size={48} color="#9ca3af" />
+            <Text style={styles.mainTimerLabel}>جاهز للبدء</Text>
           </View>
-        ) : (
-          <>
-            {exercise.status === 'pending' && (
-              <View style={styles.mainTimerContainer}>
-                <Dumbbell size={48} color="#9ca3af" />
-                <Text style={styles.mainTimerLabel}>جاهز للبدء</Text>
-              </View>
-            )}
-            {exercise.status === 'in-progress' && (
-              <View style={styles.mainTimerContainer}>
-                <Text style={styles.mainTimerLabel}>وقت التمرين</Text>
-                <Text style={[styles.mainTimerValue, { color: settings.primaryColor }]}>
-                  {formatTime(exercise.exerciseSecondsCurrentSession)}
-                </Text>
-              </View>
-            )}
-            {exercise.status === 'resting' && (
-              <View style={styles.mainTimerContainer}>
-                <Text style={styles.mainTimerLabel}>وقت الراحة</Text>
-                <Text style={[styles.mainTimerValue, { color: '#f59e0b' }]}>
-                  {formatTime(exercise.restSecondsCurrentSession)}
-                </Text>
-              </View>
-            )}
-            {exercise.status === 'completed' && (
-              <View style={styles.mainTimerContainer}>
-                <CheckCircle2 size={48} color="#10b981" />
-                <Text style={styles.mainTimerLabel}>اكتمل التمرين</Text>
-              </View>
-            )}
-          </>
+        )}
+        {exercise.status === 'in-progress' && (
+          <View style={styles.mainTimerContainer}>
+            <Text style={styles.mainTimerLabel}>وقت التمرين</Text>
+            <Text style={[styles.mainTimerValue, { color: settings.primaryColor }]}>
+              {formatTime(exercise.exerciseSecondsCurrentSession)}
+            </Text>
+          </View>
+        )}
+        {exercise.status === 'resting' && (
+          <View style={styles.mainTimerContainer}>
+            <Text style={styles.mainTimerLabel}>وقت الراحة</Text>
+            <Text style={[styles.mainTimerValue, { color: '#f59e0b' }]}>
+              {formatTime(exercise.restSecondsCurrentSession)}
+            </Text>
+          </View>
+        )}
+        {exercise.status === 'completed' && (
+          <View style={styles.mainTimerContainer}>
+            <CheckCircle2 size={48} color="#10b981" />
+            <Text style={styles.mainTimerLabel}>اكتمل التمرين</Text>
+          </View>
         )}
       </View>
 
@@ -451,56 +413,44 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
 
       {/* Enhanced Controls */}
       <View style={styles.controlsContainer}>
-        <Animated.View style={[styles.animatedButtonWrapper, { transform: [{ scale: buttonPressAnim }] }]}>
+        <Animated.View style={[styles.animatedButtonWrapper, { flex: 2, transform: [{ scale: buttonPressAnim }] }]}>
           <TouchableOpacity
             style={[
               styles.modernControlButton,
-              { backgroundColor: settings.primaryColor },
-              isStartDisabled && styles.disabledButton
-            ]}
-            onPress={handleStartExercise}
-            disabled={isStartDisabled}
-          >
-            <Play size={14} color="white" />
-            <Text style={styles.modernControlButtonText}>بدء</Text>
-          </TouchableOpacity>
-        </Animated.View>
-
-        <Animated.View style={[styles.animatedButtonWrapper, { transform: [{ scale: buttonPressAnim }] }]}>
-          <TouchableOpacity
-            style={[
-              styles.modernControlButton,
-              exercise.status === 'in-progress' ? 
-                { backgroundColor: '#f59e0b' } : 
-                exercise.isRestPaused ?
-                { backgroundColor: '#10b981' } :
-                { backgroundColor: settings.primaryColor },
-              isPauseResumeDisabled && styles.disabledButton
+              { height: 48 },
+              exercise.status === 'in-progress'
+                ? { backgroundColor: '#f59e0b' }
+                : exercise.isRestPaused
+                ? { backgroundColor: '#10b981' }
+                : { backgroundColor: settings.primaryColor },
+              isPauseResumeDisabled && styles.disabledButton,
             ]}
             onPress={handlePauseResume}
             disabled={isPauseResumeDisabled}
           >
             {exercise.status === 'in-progress' ? (
-              <Pause size={14} color="white" />
+              <Pause size={18} color="white" />
             ) : (
-              <Play size={14} color="white" />
+              <Play size={18} color="white" />
             )}
-            <Text style={styles.modernControlButtonText}>{getPauseResumeText()}</Text>
+            <Text style={[styles.modernControlButtonText, { fontSize: 16 }]}>
+              {getPauseResumeText()}
+            </Text>
           </TouchableOpacity>
         </Animated.View>
 
-        <Animated.View style={[styles.animatedButtonWrapper, { transform: [{ scale: buttonPressAnim }] }]}>
+        <Animated.View style={[styles.animatedButtonWrapper, { flex: 1, transform: [{ scale: buttonPressAnim }] }]}>
           <TouchableOpacity
             style={[
               styles.modernControlButton,
-              { backgroundColor: '#10b981' },
-              isFinishDisabled && styles.disabledButton
+              { height: 48, backgroundColor: '#ef4444' },
+              isFinishDisabled && styles.disabledButton,
             ]}
             onPress={handleFinish}
             disabled={isFinishDisabled}
           >
-            <Square size={14} color="white" />
-            <Text style={styles.modernControlButtonText}>إنهاء</Text>
+            <Square size={18} color="white" />
+            <Text style={[styles.modernControlButtonText, { fontSize: 16 }]}>إنهاء</Text>
           </TouchableOpacity>
         </Animated.View>
       </View>
@@ -1148,41 +1098,5 @@ const styles = StyleSheet.create({
   },
   animatedButtonWrapper: {
     flex: 1,
-  },
-  summaryContainer: {
-    width: '100%',
-    padding: 10,
-    alignItems: 'center',
-    gap: 8,
-  },
-  summaryTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#374151',
-    marginBottom: 4,
-  },
-  summaryStatRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '80%',
-  },
-  summaryStatLabel: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  summaryStatValue: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  logSessionButton: {
-    marginTop: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-  },
-  logSessionButtonText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 14,
   },
 });

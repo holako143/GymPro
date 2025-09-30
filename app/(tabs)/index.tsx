@@ -3,7 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   useWindowDimensions,
   Modal,
@@ -42,9 +42,7 @@ export default function CurrentExerciseScreen() {
   const [showStopModal, setShowStopModal] = useState<boolean>(false);
   const [stopReason, setStopReason] = useState<string>('');
 
-  const scrollViewRef = useRef<ScrollView>(null);
-  const cardSlideAnim = useRef(new Animated.Value(0)).current;
-  const [completedExerciseIds, setCompletedExerciseIds] = useState<Set<number>>(new Set());
+  const flatListRef = useRef<FlatList<Exercise>>(null);
 
   // Get exercises to display
   const exercisesToRender = activePlanId !== null ? 
@@ -87,58 +85,33 @@ export default function CurrentExerciseScreen() {
     }
   };
 
-  // Auto-scroll only when exercise is completed and moving to next
-  const [shouldAutoScroll, setShouldAutoScroll] = useState<boolean>(false);
-  
+  // Effect to scroll to the active exercise card
   useEffect(() => {
-    if (shouldAutoScroll && currentExercise && scrollViewRef.current) {
-      const currentIndex = exercisesToRender.findIndex(e => e.id === currentExercise);
-      if (currentIndex !== -1) {
+    if (currentExercise && flatListRef.current) {
+      const index = exercisesToRender.findIndex(e => e.id === currentExercise);
+      if (index > -1) {
+        // A short timeout can help ensure the list has rendered before scrolling.
         setTimeout(() => {
-          console.log('[AutoScroll] Scrolling to index', currentIndex, 'x:', currentIndex * width);
-          scrollViewRef.current?.scrollTo({
-            x: currentIndex * width,
-            animated: true
+          flatListRef.current?.scrollToIndex({
+            animated: true,
+            index: index,
+            viewPosition: 0.5, // Center the item
           });
-          setShouldAutoScroll(false);
-        }, 200);
+        }, 100);
       }
     }
-  }, [shouldAutoScroll, currentExercise, exercisesToRender, width]);
+  }, [currentExercise, exercisesToRender.length]); // Rerun when the exercise or list changes
 
-  // Handle exercise completion animation
-  useEffect(() => {
-    const completedExercises = exercisesToRender.filter(e => e.status === 'completed');
-    const newCompletedIds = new Set(completedExercises.map(e => e.id));
-    const newlyCompleted = completedExercises.find(e => !completedExerciseIds.has(e.id));
-    if (newlyCompleted) {
-      Animated.timing(cardSlideAnim, {
-        toValue: 1,
-        duration: 800,
-        easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
-        useNativeDriver: true,
-      }).start(() => {
-        cardSlideAnim.setValue(0);
-        setCompletedExerciseIds(newCompletedIds);
-        setShouldAutoScroll(true);
-      });
-    }
-  }, [exercisesToRender, completedExerciseIds, cardSlideAnim]);
-
-  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (!shouldAutoScroll) {
-      const scrollX = event.nativeEvent.contentOffset.x;
-      const cardWidth = width;
-      const currentIndex = Math.round(scrollX / cardWidth);
-      if (currentIndex >= 0 && currentIndex < exercisesToRender.length) {
-        const newCurrentExercise = exercisesToRender[currentIndex].id;
-        if (newCurrentExercise !== currentExercise) {
-          console.log('[ManualScroll] New index', currentIndex, 'exerciseId', newCurrentExercise);
-          updateState({ currentExercise: newCurrentExercise });
-        }
+  // Handler for when the user manually scrolls and changes the visible card
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: any[] }) => {
+    if (viewableItems.length > 0) {
+      const visibleItem = viewableItems[0];
+      // Update the current exercise only if it's different, to avoid loops
+      if (visibleItem.isViewable && visibleItem.item.id !== currentExercise) {
+        updateState({ currentExercise: visibleItem.item.id });
       }
     }
-  };
+  }).current;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]} testID="current-screen">
@@ -208,48 +181,27 @@ export default function CurrentExerciseScreen() {
       {/* Exercise Cards with Horizontal Scroll */}
       {exercisesToRender.length > 0 ? (
         <View style={styles.cardsSection}>
-          <ScrollView
-            ref={scrollViewRef}
+          <FlatList
+            ref={flatListRef}
+            data={exercisesToRender}
+            renderItem={({ item: exercise }) => (
+              <View style={[styles.cardWrapper, { width: width }]}>
+                <ExerciseCard
+                  exercise={exercise}
+                  isActive={exercise.id === currentExercise}
+                />
+              </View>
+            )}
+            keyExtractor={(item) => item.id.toString()}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            style={styles.horizontalScrollView}
-            contentContainerStyle={styles.horizontalCardsContainer}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-            testID="cards-scroll"
-          >
-            {exercisesToRender.map((exercise) => {
-              const isCompleted = completedExerciseIds.has(exercise.id);
-              return (
-                <Animated.View
-                  key={exercise.id}
-                  style={[
-                    styles.cardWrapper,
-                    { width: width },
-                    isCompleted && {
-                      transform: [{
-                        translateX: cardSlideAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0, width],
-                        })
-                      }],
-                      opacity: cardSlideAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [1, 0],
-                      })
-                    }
-                  ]}
-                  testID={`card-${exercise.id}`}
-                >
-                  <ExerciseCard
-                    exercise={exercise}
-                    isActive={exercise.id === currentExercise}
-                  />
-                </Animated.View>
-              );
-            })}
-          </ScrollView>
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={{
+              itemVisiblePercentThreshold: 50, // Trigger when 50% of the item is visible
+            }}
+            testID="cards-flatlist"
+          />
         </View>
       ) : (
         <View style={styles.emptyContainer}>
