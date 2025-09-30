@@ -331,6 +331,17 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     });
   }, [state.exercises, state.trainingPlans, state.plannedWorkouts, updateState]);
 
+  const replaceAllExercises = useCallback((newExercises: Exercise[]) => {
+    const nextId = Math.max(...newExercises.map(e => e.id), 0) + 1;
+    updateState({
+      exercises: newExercises,
+      nextExerciseId: nextId,
+      trainingPlans: [],
+      activePlanId: null,
+      currentExercise: newExercises.length > 0 ? newExercises[0].id : null,
+    });
+  }, [updateState]);
+
   // Timer management
   const startExerciseTimer = useCallback((exerciseId: number) => {
     const exercise = state.exercises.find(e => e.id === exerciseId);
@@ -881,6 +892,7 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     updateSettings,
     
     // State updates
-    updateState
-  }), [state, formatTime, calculate1RM, playSound, addExercise, updateExercise, deleteExercise, startExerciseTimer, pauseExerciseTimer, resumeExerciseTimer, finishSession, startGlobalSession, stopGlobalSession, addTrainingPlan, updateTrainingPlan, deleteTrainingPlan, activateTrainingPlan, deactivateAllPlans, addNotification, updateNotification, deleteNotification, updateSettings, updateState]);
+    updateState,
+    replaceAllExercises
+  }), [state, formatTime, calculate1RM, playSound, addExercise, updateExercise, deleteExercise, startExerciseTimer, pauseExerciseTimer, resumeExerciseTimer, finishSession, startGlobalSession, stopGlobalSession, addTrainingPlan, updateTrainingPlan, deleteTrainingPlan, activateTrainingPlan, deactivateAllPlans, addNotification, updateNotification, deleteNotification, updateSettings, updateState, replaceAllExercises]);
 });
