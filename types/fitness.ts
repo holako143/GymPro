@@ -73,6 +73,14 @@ export interface AppSettings {
   units: 'kg' | 'lb';
 }
 
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  unlocked: boolean;
+  dateUnlocked?: string;
+}
+
 export interface AppState {
   sessionStarted: boolean;
   sessionSeconds: number;
@@ -82,6 +90,7 @@ export interface AppState {
   notifications: Notification[];
   plannedWorkouts: PlannedWorkout[];
   sessionHistory: SessionHistory[];
+  achievements: Achievement[];
   currentGlobalSession: SessionHistory | null;
   totalExerciseTime: number;
   totalRestTime: number;
