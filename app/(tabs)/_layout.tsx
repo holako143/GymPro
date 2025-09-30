@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Settings, LayoutDashboard, Library } from 'lucide-react-native';
+import { Dumbbell, List, Settings } from 'lucide-react-native';
 import { useFitnessStore } from '@/hooks/useFitnessStore';
 
 export default function TabLayout() {
@@ -23,19 +23,20 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="dashboard"
+        name="index"
         options={{
-          title: 'لوحة المعلومات',
-          tabBarIcon: ({ color, size }) => <LayoutDashboard color={color} size={size} />,
+          title: 'التمرين الحالي',
+          tabBarIcon: ({ color, size }) => <Dumbbell color={color} size={size} />,
         }}
       />
-       <Tabs.Screen
+      <Tabs.Screen
         name="library"
         options={{
           title: 'المكتبة',
-          tabBarIcon: ({ color, size }) => <Library color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => <List color={color} size={size} />,
         }}
       />
+
       <Tabs.Screen
         name="settings"
         options={{

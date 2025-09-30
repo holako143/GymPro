@@ -2,9 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Animated, Easing } from 'react-native';
 import { Exercise, DIFFICULTY_EMOJIS, DifficultyLevel, DIFFICULTY_LABELS } from '@/types/fitness';
 import { useFitnessStore } from '@/hooks/useFitnessStore';
-import { Play, Pause, Square, Clock, Target, X, Dumbbell, Volume2, VolumeX, CheckCircle2, FastForward } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
-import { Audio } from 'expo-av';
+import { Play, Pause, Square, Clock, Target, X } from 'lucide-react-native';
 
 interface ExerciseCardProps {
   exercise: Exercise;
@@ -16,7 +14,6 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
     startExerciseTimer, 
     pauseExerciseTimer,
     finishSession,
-    skipRest,
     formatTime,
     settings,
     updateState,
@@ -26,8 +23,6 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
     sessionStarted,
   } = useFitnessStore();
 
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [isSoundMuted, setIsSoundMuted] = useState(false);
   const [showFinishModal, setShowFinishModal] = useState<boolean>(false);
   const [showSessionModal, setShowSessionModal] = useState<boolean>(false);
   const [selectedSession, setSelectedSession] = useState<number | null>(null);
@@ -38,31 +33,6 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const buttonPressAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    // NOTE: Sound feature is temporarily disabled as the asset file is missing.
-    // To enable, add 'click.mp3' to 'assets/sounds/' and uncomment the following lines.
-    /*
-    Audio.Sound.createAsync(require('@/assets/sounds/click.mp3'))
-      .then(response => setSound(response.sound))
-      .catch(() => console.log("Could not load sound asset. Sound will be disabled."));
-    */
-
-    return () => {
-      sound?.unloadAsync();
-    };
-  }, []);
-
-  const playSoundAndHaptic = async (hapticStyle: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) => {
-    if (!isSoundMuted && sound) {
-      try {
-        await sound.replayAsync();
-      } catch (error) {
-        // silent fail
-      }
-    }
-    Haptics.impactAsync(hapticStyle);
-  };
 
   const getDifficultyColor = (difficulty: string | null) => {
     const colors = {
@@ -101,13 +71,47 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
   const isRestOverdue = exercise.status === 'resting' && 
     exercise.restSecondsCurrentSession < -15;
 
+  const handleStartExercise = () => {
+    // Animate button press
+    Animated.sequence([
+      Animated.timing(buttonPressAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(buttonPressAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      })
+    ]).start();
+
+    startExerciseTimer(exercise.id);
+  };
+
   const handlePauseResume = () => {
-    playSoundAndHaptic();
+    // Animate button press
+    Animated.sequence([
+      Animated.timing(buttonPressAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(buttonPressAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      })
+    ]).start();
+
     if (exercise.status === 'in-progress') {
+      // Pause the exercise and start rest
       pauseExerciseTimer(exercise.id);
     } else if (exercise.isRestPaused) {
+      // Resume from rest - continue exercise
       startExerciseTimer(exercise.id);
     } else if (exercise.status === 'pending') {
+      // Start the exercise if it's pending
       startExerciseTimer(exercise.id);
     }
   };
@@ -122,7 +126,20 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
   };
 
   const handleFinish = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // Animate button press
+    Animated.sequence([
+      Animated.timing(buttonPressAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(buttonPressAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      })
+    ]).start();
+
     setShowFinishModal(true);
   };
 
@@ -281,7 +298,7 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
   return (
     <Animated.View style={[
       styles.card,
-      isActive && [styles.activeCard, { borderColor: settings.primaryColor }],
+      isActive && styles.activeCard,
       isRestOverdue && styles.restOverdueCard,
       { borderLeftColor: getDifficultyColor(exercise.difficulty) },
       cardTransform
@@ -315,50 +332,17 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
             </View>
           </View>
         </View>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={() => setIsSoundMuted(!isSoundMuted)} style={styles.muteButton}>
-            {isSoundMuted ? <VolumeX size={18} color="#6b7280" /> : <Volume2 size={18} color="#6b7280" />}
-          </TouchableOpacity>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(exercise.status) }]}>
-            <Text style={styles.statusText}>{getStatusText(exercise.status)}</Text>
-          </View>
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(exercise.status) }]}>
+          <Text style={styles.statusText}>{getStatusText(exercise.status)}</Text>
         </View>
       </View>
 
-      {/* Main Display Area */}
-      <View style={styles.mainDisplayContainer}>
-        {exercise.status === 'pending' && (
-          <View style={styles.mainTimerContainer}>
-            <Dumbbell size={48} color="#9ca3af" />
-            <Text style={styles.mainTimerLabel}>جاهز للبدء</Text>
-          </View>
-        )}
-        {exercise.status === 'in-progress' && (
-          <View style={styles.mainTimerContainer}>
-            <Text style={styles.mainTimerLabel}>وقت التمرين</Text>
-            <Text style={[styles.mainTimerValue, { color: settings.primaryColor }]}>
-              {formatTime(exercise.exerciseSecondsCurrentSession)}
-            </Text>
-          </View>
-        )}
-        {exercise.status === 'resting' && (
-          <View style={styles.mainTimerContainer}>
-            <Text style={styles.mainTimerLabel}>وقت الراحة</Text>
-            <Text style={[styles.mainTimerValue, { color: '#f59e0b' }]}>
-              {formatTime(exercise.restSecondsCurrentSession)}
-            </Text>
-            <TouchableOpacity style={styles.skipButton} onPress={() => skipRest(exercise.id)}>
-              <FastForward size={16} color="white" />
-              <Text style={styles.skipButtonText}>تخطي الراحة</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        {exercise.status === 'completed' && (
-          <View style={styles.mainTimerContainer}>
-            <CheckCircle2 size={48} color="#10b981" />
-            <Text style={styles.mainTimerLabel}>اكتمل التمرين</Text>
-          </View>
-        )}
+      {/* Exercise Image Placeholder */}
+      <View style={styles.exerciseImageContainer}>
+        <View style={styles.exerciseImagePlaceholder}>
+          <Text style={styles.exerciseImageText}>صورة توضيحية للتمرين</Text>
+          <Text style={styles.exerciseImageSubtext}>{exercise.name}</Text>
+        </View>
       </View>
 
       {/* Enhanced Timer Section */}
@@ -418,44 +402,56 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
 
       {/* Enhanced Controls */}
       <View style={styles.controlsContainer}>
-        <Animated.View style={[styles.animatedButtonWrapper, { flex: 2, transform: [{ scale: buttonPressAnim }] }]}>
+        <Animated.View style={[styles.animatedButtonWrapper, { transform: [{ scale: buttonPressAnim }] }]}>
           <TouchableOpacity
             style={[
               styles.modernControlButton,
-              { height: 48 },
-              exercise.status === 'in-progress'
-                ? { backgroundColor: '#f59e0b' }
-                : exercise.isRestPaused
-                ? { backgroundColor: '#10b981' }
-                : { backgroundColor: settings.primaryColor },
-              isPauseResumeDisabled && styles.disabledButton,
+              { backgroundColor: settings.primaryColor },
+              isStartDisabled && styles.disabledButton
+            ]}
+            onPress={handleStartExercise}
+            disabled={isStartDisabled}
+          >
+            <Play size={14} color="white" />
+            <Text style={styles.modernControlButtonText}>بدء</Text>
+          </TouchableOpacity>
+        </Animated.View>
+
+        <Animated.View style={[styles.animatedButtonWrapper, { transform: [{ scale: buttonPressAnim }] }]}>
+          <TouchableOpacity
+            style={[
+              styles.modernControlButton,
+              exercise.status === 'in-progress' ?
+                { backgroundColor: '#f59e0b' } :
+                exercise.isRestPaused ?
+                { backgroundColor: '#10b981' } :
+                { backgroundColor: settings.primaryColor },
+              isPauseResumeDisabled && styles.disabledButton
             ]}
             onPress={handlePauseResume}
             disabled={isPauseResumeDisabled}
           >
             {exercise.status === 'in-progress' ? (
-              <Pause size={18} color="white" />
+              <Pause size={14} color="white" />
             ) : (
-              <Play size={18} color="white" />
+              <Play size={14} color="white" />
             )}
-            <Text style={[styles.modernControlButtonText, { fontSize: 16 }]}>
-              {getPauseResumeText()}
-            </Text>
+            <Text style={styles.modernControlButtonText}>{getPauseResumeText()}</Text>
           </TouchableOpacity>
         </Animated.View>
 
-        <Animated.View style={[styles.animatedButtonWrapper, { flex: 1, transform: [{ scale: buttonPressAnim }] }]}>
+        <Animated.View style={[styles.animatedButtonWrapper, { transform: [{ scale: buttonPressAnim }] }]}>
           <TouchableOpacity
             style={[
               styles.modernControlButton,
-              { height: 48, backgroundColor: '#ef4444' },
-              isFinishDisabled && styles.disabledButton,
+              { backgroundColor: '#10b981' },
+              isFinishDisabled && styles.disabledButton
             ]}
             onPress={handleFinish}
             disabled={isFinishDisabled}
           >
-            <Square size={18} color="white" />
-            <Text style={[styles.modernControlButtonText, { fontSize: 16 }]}>إنهاء</Text>
+            <Square size={14} color="white" />
+            <Text style={styles.modernControlButtonText}>إنهاء</Text>
           </TouchableOpacity>
         </Animated.View>
       </View>
@@ -654,21 +650,22 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
 const styles = StyleSheet.create({
   card: {
     backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 16,
-    marginVertical: 8,
+    borderRadius: 12,
+    padding: 14,
+    marginVertical: 6,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 6,
-    borderLeftWidth: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 4,
+    borderLeftWidth: 3,
     borderLeftColor: 'transparent',
     borderWidth: 1,
     borderColor: '#f1f5f9',
   },
   activeCard: {
     borderWidth: 2,
+    borderColor: '#3b82f6',
     transform: [{ scale: 1.02 }],
     shadowOpacity: 0.15,
     shadowRadius: 24,
@@ -683,15 +680,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  muteButton: {
-    padding: 4,
+    marginBottom: 14,
   },
   titleSection: {
     flex: 1,
@@ -700,73 +689,70 @@ const styles = StyleSheet.create({
   titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   exerciseName: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '800',
     color: '#111827',
     flex: 1,
-    letterSpacing: -0.5,
+    letterSpacing: -0.2,
   },
   headerDifficultyEmoji: {
-    fontSize: 20,
-    marginLeft: 8,
+    fontSize: 18,
+    marginLeft: 6,
   },
   muscleGroup: {
-    fontSize: 15,
-    color: '#475569',
+    fontSize: 13,
+    color: '#6b7280',
     fontWeight: '600',
   },
   muscleAndStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 6,
+    marginTop: 4,
   },
   compactStats: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
   },
   compactStatItem: {
     alignItems: 'center',
   },
   compactStatLabel: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#9ca3af',
-    fontWeight: '700',
+    fontWeight: '600',
     marginBottom: 2,
-    textTransform: 'uppercase',
   },
   compactStatValue: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '800',
   },
-  mainDisplayContainer: {
-    height: 140,
+  exerciseImageContainer: {
+    marginBottom: 12,
+  },
+  exerciseImagePlaceholder: {
+    height: 120,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0'
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+    borderStyle: 'dashed',
   },
-  mainTimerContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 4,
-  },
-  mainTimerLabel: {
-    fontSize: 18,
+  exerciseImageText: {
+    fontSize: 14,
     color: '#6b7280',
-    fontWeight: '700',
+    fontWeight: '600',
+    marginBottom: 4,
   },
-  mainTimerValue: {
-    fontSize: 60,
-    fontWeight: '900',
-    letterSpacing: -1.5,
-    color: '#1e293b',
+  exerciseImageSubtext: {
+    fontSize: 11,
+    color: '#9ca3af',
+    fontWeight: '500',
   },
   statusBadge: {
     paddingHorizontal: 12,
@@ -786,10 +772,10 @@ const styles = StyleSheet.create({
   },
   timerSection: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 10,
     backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 10,
+    padding: 10,
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
@@ -800,12 +786,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   timer: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
     letterSpacing: -0.4,
   },
   timerLabel: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#6b7280',
     fontWeight: '600',
   },
@@ -836,36 +822,38 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
   progressContainer: {
-    marginBottom: 16,
+    marginBottom: 10,
   },
   progressHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   progressLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#374151',
-    fontWeight: '700',
+    fontWeight: '600',
   },
   progressPercent: {
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
   },
   progressBar: {
-    height: 10,
-    backgroundColor: '#e2e8f0',
-    borderRadius: 5,
-    marginBottom: 6,
+    height: 8,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 4,
+    marginBottom: 4,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
   progressFill: {
     height: '100%',
-    borderRadius: 5,
+    borderRadius: 4,
   },
   progressText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6b7280',
     textAlign: 'center',
     fontWeight: '500',
@@ -873,23 +861,23 @@ const styles = StyleSheet.create({
   controlsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
-    gap: 8,
+    marginBottom: 10,
+    gap: 6,
   },
   modernControlButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingHorizontal: 10,
-    borderRadius: 12,
-    gap: 6,
+    borderRadius: 8,
+    gap: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
   },
   disabledButton: {
     backgroundColor: '#9ca3af',
@@ -898,17 +886,18 @@ const styles = StyleSheet.create({
   modernControlButtonText: {
     color: 'white',
     fontWeight: '700',
-    fontSize: 14,
-    letterSpacing: 0.2,
+    fontSize: 11,
+    letterSpacing: 0.1,
   },
   sessionsContainer: {
     marginTop: 12,
   },
   sessionsTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
-    marginBottom: 10,
+    marginBottom: 8,
     color: '#111827',
+    letterSpacing: -0.1,
   },
   sessionsGrid: {
     flexDirection: 'row',
@@ -917,38 +906,38 @@ const styles = StyleSheet.create({
   },
   sessionCard: {
     backgroundColor: '#f8fafc',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    minWidth: 75,
+    borderRadius: 8,
+    padding: 10,
+    minWidth: 70,
     alignItems: 'center',
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: '#e2e8f0',
     gap: 4,
   },
   activeSessionCard: {
+    borderColor: '#3b82f6',
     backgroundColor: '#eff6ff',
     borderWidth: 2,
   },
   completedSessionCard: {
     backgroundColor: '#10b981',
-    borderColor: '#059669',
+    borderColor: '#10b981',
   },
   sessionNumber: {
     fontWeight: '800',
-    fontSize: 18,
+    fontSize: 16,
     color: '#1f2937',
   },
   sessionStats: {
     alignItems: 'center',
   },
   sessionStatText: {
-    fontSize: 11,
-    color: '#475569',
+    fontSize: 10,
+    color: '#6b7280',
     fontWeight: '600',
   },
   sessionEmoji: {
-    fontSize: 16,
+    fontSize: 14,
   },
   modalOverlay: {
     flex: 1,
@@ -978,7 +967,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#111827',
   },
@@ -1024,10 +1013,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   difficultyEmoji: {
-    fontSize: 22,
+    fontSize: 20,
   },
   difficultyLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: '#6b7280',
   },
@@ -1083,7 +1072,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     backgroundColor: 'white',
-    borderRadius: 10,
+    borderRadius: 8,
     padding: 8,
     gap: 4,
     borderWidth: 1,
@@ -1095,26 +1084,11 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   timerValue: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
     letterSpacing: -0.2,
   },
   animatedButtonWrapper: {
     flex: 1,
-  },
-  skipButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f59e0b',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginTop: 10,
-    gap: 6,
-  },
-  skipButtonText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 12,
   },
 });
