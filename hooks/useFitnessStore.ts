@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { AppState, Exercise, TrainingPlan, SessionHistory, SessionData, DifficultyLevel, AppSettings, Notification } from '@/types/fitness';
+import { TRAINING_PLAN_DATABASE } from '../constants/planDatabase';
+import { EXERCISE_DATABASE } from '../constants/exerciseDatabase';
 
 const STORAGE_KEYS = {
   EXERCISES: 'fitnessAppExercises',
@@ -153,54 +155,79 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     }
   };
 
-  // Initialize default data
+  // Initialize default data from the database files
   const initializeDefaultData = (newState: AppState) => {
-    newState.exercises = [
-      {
-        id: 1, name: "تمرين الضغط (Dumbbell Press)", muscle: "صدر", status: "pending",
-        exerciseSecondsCurrentSession: 0, restSecondsCurrentSession: 0,
-        totalExerciseSecondsAccumulated: 0, totalRestSecondsAccumulated: 0,
-        wastedTimeSeconds: 0, sessions: 4, completedSessions: 0, restTime: 90, currentSession: 1,
-        difficulty: null, sessionData: {}, audioAlertTriggered: false,
-        isRestPaused: false, restStartTime: null
-      },
-      {
-        id: 2, name: "الضغط بالبار (Barbell Bench Press)", muscle: "صدر", status: "pending",
-        exerciseSecondsCurrentSession: 0, restSecondsCurrentSession: 0,
-        totalExerciseSecondsAccumulated: 0, totalRestSecondsAccumulated: 0,
-        wastedTimeSeconds: 0, sessions: 3, completedSessions: 0, restTime: 60, currentSession: 1,
-        difficulty: null, sessionData: {}, audioAlertTriggered: false,
-        isRestPaused: false, restStartTime: null
-      },
-      {
-        id: 3, name: "الرفعة المميتة (Deadlift)", muscle: "ظهر", status: "pending",
-        exerciseSecondsCurrentSession: 0, restSecondsCurrentSession: 0,
-        totalExerciseSecondsAccumulated: 0, totalRestSecondsAccumulated: 0,
-        wastedTimeSeconds: 0, sessions: 3, completedSessions: 0, restTime: 90, currentSession: 1,
-        difficulty: null, sessionData: {}, audioAlertTriggered: false,
-        isRestPaused: false, restStartTime: null
-      },
-      {
-        id: 4, name: "القرفصاء بالبار (Barbell Squat)", muscle: "أرجل", status: "pending",
-        exerciseSecondsCurrentSession: 0, restSecondsCurrentSession: 0,
-        totalExerciseSecondsAccumulated: 0, totalRestSecondsAccumulated: 0,
-        wastedTimeSeconds: 0, sessions: 4, completedSessions: 0, restTime: 120, currentSession: 1,
-        difficulty: null, sessionData: {}, audioAlertTriggered: false,
-        isRestPaused: false, restStartTime: null
-      }
-    ];
-    newState.nextExerciseId = 5;
+    let exerciseIdCounter = 1;
+    const templateIdToStateIdMap = new Map<string, number>();
+    const allExercises: Exercise[] = [];
 
-    newState.trainingPlans = [
-      {
-        id: 1, name: "خطة المبتدئين (كامل الجسم)",
-        description: "خطة تدريب للمبتدئين تركز على بناء القوة الأساسية لجميع مجموعات العضلات الرئيسية.",
-        exercises: [1, 2, 3, 4], active: true
+    // Create all exercises from the EXERCISE_DATABASE
+    for (const muscleGroup of Object.values(EXERCISE_DATABASE)) {
+      for (const template of muscleGroup) {
+        const newId = exerciseIdCounter++;
+        templateIdToStateIdMap.set(template.id, newId);
+        allExercises.push({
+          id: newId,
+          name: template.name,
+          muscle: template.muscle,
+          sessions: 3, // Default, will be overridden by plan
+          restTime: 60, // Default, will be overridden by plan
+          status: 'pending',
+          exerciseSecondsCurrentSession: 0,
+          restSecondsCurrentSession: 0,
+          totalExerciseSecondsAccumulated: 0,
+          totalRestSecondsAccumulated: 0,
+          wastedTimeSeconds: 0,
+          completedSessions: 0,
+          currentSession: 1,
+          difficulty: null,
+          sessionData: {},
+          audioAlertTriggered: false,
+          isRestPaused: false,
+          restStartTime: null,
+        });
       }
-    ];
-    newState.nextPlanId = 2;
-    newState.activePlanId = 1;
-    newState.currentExercise = 1;
+    }
+    newState.exercises = allExercises;
+    newState.nextExerciseId = exerciseIdCounter;
+
+    // Create training plans from the plan database
+    let planIdCounter = 1;
+    const allPlans: TrainingPlan[] = TRAINING_PLAN_DATABASE.map(planTemplate => {
+      const planExerciseIds: number[] = [];
+      planTemplate.days.forEach(day => {
+        day.exercises.forEach(planEx => {
+          const stateExerciseId = templateIdToStateIdMap.get(planEx.id);
+          if (stateExerciseId) {
+            planExerciseIds.push(stateExerciseId);
+            const exerciseToUpdate = newState.exercises.find(e => e.id === stateExerciseId);
+            if (exerciseToUpdate) {
+              exerciseToUpdate.sessions = planEx.sets;
+              exerciseToUpdate.restTime = planEx.rest;
+            }
+          }
+        });
+      });
+
+      return {
+        id: planIdCounter++,
+        name: planTemplate.name,
+        description: planTemplate.description,
+        exercises: planExerciseIds,
+        active: false, // Will be set next
+      };
+    });
+
+    if (allPlans.length > 0) {
+      allPlans[0].active = true;
+      newState.activePlanId = allPlans[0].id;
+      if (allPlans[0].exercises.length > 0) {
+        newState.currentExercise = allPlans[0].exercises[0];
+      }
+    }
+
+    newState.trainingPlans = allPlans;
+    newState.nextPlanId = planIdCounter;
 
     newState.notifications = [
       {
