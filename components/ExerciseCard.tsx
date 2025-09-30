@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Animated, Easing } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Animated } from 'react-native';
 import { Exercise, DIFFICULTY_EMOJIS, DifficultyLevel, DIFFICULTY_LABELS } from '@/types/fitness';
 import { useFitnessStore } from '@/hooks/useFitnessStore';
-import { Play, Pause, Square, Clock, Target, X } from 'lucide-react-native';
+import { Play, Pause, Check, X } from 'lucide-react-native';
 
 interface ExerciseCardProps {
   exercise: Exercise;
@@ -16,10 +16,6 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
     finishSession,
     formatTime,
     settings,
-    updateState,
-    exercises,
-    activePlanId,
-    trainingPlans,
     sessionStarted,
   } = useFitnessStore();
 
@@ -29,173 +25,56 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
   const [weight, setWeight] = useState<string>('20');
   const [reps, setReps] = useState<string>('10');
   const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyLevel>('medium');
-  const slideAnim = useRef(new Animated.Value(0)).current;
+
+  // Animation refs
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const buttonPressAnim = useRef(new Animated.Value(1)).current;
 
   const getDifficultyColor = (difficulty: string | null) => {
-    const colors = {
-      'very-easy': '#4ade80',
-      'easy': '#a3e635',
-      'medium': '#f59e0b',
-      'hard': '#ef4444',
-      'very-hard': '#b91c1c'
-    };
+    const colors = { 'very-easy': '#4ade80', 'easy': '#a3e635', 'medium': '#f59e0b', 'hard': '#ef4444', 'very-hard': '#b91c1c' };
     return difficulty ? colors[difficulty as keyof typeof colors] : 'transparent';
   };
 
   const getStatusText = (status: string) => {
-    const statusMap = {
-      'completed': 'تم الإنتهاء',
-      'in-progress': 'قيد التنفيذ',
-      'resting': 'في الراحة',
-      'pending': 'لم يبدأ'
-    };
+    const statusMap = { 'completed': 'مكتمل', 'in-progress': 'قيد التمرين', 'resting': 'في راحة', 'pending': 'جاهز للبدء' };
     return statusMap[status as keyof typeof statusMap] || status;
   };
 
   const getStatusColor = (status: string) => {
-    const colors = {
-      'completed': '#4cc9f0',
-      'in-progress': settings.primaryColor,
-      'resting': '#7209b7',
-      'pending': '#fca311'
-    };
+    const colors = { 'completed': '#4ade80', 'in-progress': settings.primaryColor, 'resting': '#f59e0b', 'pending': '#6b7280' };
     return colors[status as keyof typeof colors] || '#6c757d';
   };
 
-  const progressPercent = exercise.sessions > 0 ? 
-    (exercise.completedSessions / exercise.sessions) * 100 : 0;
+  const isRestOverdue = exercise.status === 'resting' && exercise.restSecondsCurrentSession < -15;
 
-  const isRestOverdue = exercise.status === 'resting' && 
-    exercise.restSecondsCurrentSession < -15;
+  const handleMainAction = () => {
+    if (!sessionStarted) return;
 
-  const handleStartExercise = () => {
-    // Animate button press
     Animated.sequence([
-      Animated.timing(buttonPressAnim, {
-        toValue: 0.95,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(buttonPressAnim, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      })
+      Animated.timing(buttonPressAnim, { toValue: 0.95, duration: 100, useNativeDriver: true }),
+      Animated.timing(buttonPressAnim, { toValue: 1, duration: 150, useNativeDriver: true })
     ]).start();
 
-    startExerciseTimer(exercise.id);
-  };
-
-  const handlePauseResume = () => {
-    // Animate button press
-    Animated.sequence([
-      Animated.timing(buttonPressAnim, {
-        toValue: 0.95,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(buttonPressAnim, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      })
-    ]).start();
-
-    if (exercise.status === 'in-progress') {
-      // Pause the exercise and start rest
-      pauseExerciseTimer(exercise.id);
-    } else if (exercise.isRestPaused) {
-      // Resume from rest - continue exercise
-      startExerciseTimer(exercise.id);
-    } else if (exercise.status === 'pending') {
-      // Start the exercise if it's pending
-      startExerciseTimer(exercise.id);
+    switch(exercise.status) {
+      case 'pending':
+        startExerciseTimer(exercise.id);
+        break;
+      case 'in-progress':
+        pauseExerciseTimer(exercise.id);
+        break;
+      case 'resting':
+        startExerciseTimer(exercise.id); // This will resume the exercise
+        break;
     }
-  };
-
-  const getPauseResumeText = () => {
-    if (exercise.status === 'in-progress') {
-      return 'راحة';
-    } else if (exercise.isRestPaused) {
-      return 'استئناف';
-    }
-    return 'بدء';
-  };
-
-  const handleFinish = () => {
-    // Animate button press
-    Animated.sequence([
-      Animated.timing(buttonPressAnim, {
-        toValue: 0.95,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(buttonPressAnim, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      })
-    ]).start();
-
-    setShowFinishModal(true);
   };
 
   const handleFinishSubmit = () => {
     const weightNum = parseFloat(weight) || 20;
     const repsNum = parseInt(reps) || 10;
-    
     finishSession(exercise.id, exercise.currentSession, weightNum, repsNum, selectedDifficulty);
     setShowFinishModal(false);
-    
-    // Move to next exercise automatically if this one is completed
-    setTimeout(() => {
-      const updatedExercise = exercises.find(e => e.id === exercise.id);
-      if (updatedExercise && updatedExercise.status === 'completed') {
-        // Enhanced slide out animation
-        Animated.parallel([
-          Animated.timing(slideAnim, {
-            toValue: 1,
-            duration: 600,
-            easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
-            useNativeDriver: true,
-          }),
-          Animated.timing(scaleAnim, {
-            toValue: 0.8,
-            duration: 600,
-            easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
-            useNativeDriver: true,
-          }),
-          Animated.timing(fadeAnim, {
-            toValue: 0,
-            duration: 400,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: true,
-          })
-        ]).start(() => {
-          moveToNextExercise();
-        });
-      }
-    }, 100);
   };
-
-  const moveToNextExercise = useCallback(() => {
-    if (activePlanId) {
-      const activePlan = trainingPlans.find(p => p.id === activePlanId);
-      if (activePlan) {
-        const remainingExercises = activePlan.exercises.filter(id => {
-          const ex = exercises.find(e => e.id === id);
-          return ex && ex.status !== 'completed';
-        });
-        
-        if (remainingExercises.length > 0) {
-          updateState({ currentExercise: remainingExercises[0] });
-        }
-      }
-    }
-  }, [activePlanId, trainingPlans, exercises, updateState]);
 
   const handleSessionPress = (sessionNum: number) => {
     const sessionData = exercise.sessionData[sessionNum];
@@ -205,890 +84,161 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
     }
   };
 
-  // Disable buttons if session hasn't started
-  const isStartDisabled = !sessionStarted || exercise.status === 'completed' || 
-    exercise.status === 'in-progress' || exercise.status === 'resting';
-  
-  const isPauseResumeDisabled = !sessionStarted || exercise.status === 'completed';
-  
-  const isFinishDisabled = !sessionStarted || exercise.status === 'completed' || 
-    exercise.currentSession > exercise.sessions || exercise.status === 'pending';
+  const isActionDisabled = !sessionStarted || exercise.status === 'completed';
 
-  // Auto-move to next exercise when completed
-  useEffect(() => {
-    if (exercise.status === 'completed' && isActive) {
-      const timer = setTimeout(() => {
-        // Enhanced completion animation
-        Animated.parallel([
-          Animated.timing(slideAnim, {
-            toValue: 1,
-            duration: 800,
-            easing: Easing.bezier(0.68, -0.55, 0.265, 1.55),
-            useNativeDriver: true,
-          }),
-          Animated.timing(scaleAnim, {
-            toValue: 0.7,
-            duration: 800,
-            easing: Easing.bezier(0.68, -0.55, 0.265, 1.55),
-            useNativeDriver: true,
-          }),
-          Animated.timing(fadeAnim, {
-            toValue: 0,
-            duration: 600,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          })
-        ]).start(() => {
-          moveToNextExercise();
-        });
-      }, 1500);
-      return () => clearTimeout(timer);
+  const renderMainTimer = () => {
+    let time = '00:00';
+    let label = 'وقت التمرين';
+    let color = settings.primaryColor;
+
+    if (exercise.status === 'in-progress') {
+      time = formatTime(exercise.exerciseSecondsCurrentSession);
+    } else if (exercise.status === 'resting') {
+      time = formatTime(exercise.restSecondsCurrentSession);
+      label = 'وقت الراحة';
+      color = '#f59e0b';
     }
-  }, [exercise.status, isActive, slideAnim, scaleAnim, fadeAnim, moveToNextExercise]);
 
-  // Entrance animation for active card
-  useEffect(() => {
-    if (isActive) {
-      Animated.parallel([
-        Animated.spring(scaleAnim, {
-          toValue: 1.02,
-          tension: 100,
-          friction: 8,
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        })
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          tension: 100,
-          friction: 8,
-          useNativeDriver: true,
-        })
-      ]).start();
+    return (
+      <View style={styles.mainTimerContainer}>
+        <Text style={[styles.mainTimerLabel, { color }]}>{label}</Text>
+        <Text style={[styles.mainTimer, { color }]}>{time}</Text>
+        {exercise.status === 'resting' && exercise.wastedTimeSeconds > 0 && (
+            <Text style={styles.wastedTimeText}>
+                (وقت ضائع: {formatTime(exercise.wastedTimeSeconds)})
+            </Text>
+        )}
+      </View>
+    );
+  };
+
+  const renderMainActionButton = () => {
+    let text = 'بدء';
+    let icon = <Play size={24} color="white" />;
+    let style = { backgroundColor: settings.primaryColor };
+
+    switch(exercise.status) {
+      case 'in-progress':
+        text = 'راحة';
+        icon = <Pause size={24} color="white" />;
+        style = { backgroundColor: '#f59e0b' };
+        break;
+      case 'resting':
+        text = 'استئناف';
+        icon = <Play size={24} color="white" />;
+        style = { backgroundColor: '#10b981' };
+        break;
     }
-  }, [isActive, scaleAnim, fadeAnim]);
 
-  const cardTransform = {
-    transform: [
-      {
-        translateX: slideAnim.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0, 400],
-        }),
-      },
-      {
-        scale: Animated.multiply(scaleAnim, buttonPressAnim),
-      },
-      {
-        rotateY: slideAnim.interpolate({
-          inputRange: [0, 1],
-          outputRange: ['0deg', '15deg'],
-        }),
-      },
-    ],
-    opacity: fadeAnim,
+    return (
+      <TouchableOpacity
+        style={[styles.mainActionButton, style, isActionDisabled && styles.disabledButton]}
+        onPress={handleMainAction}
+        disabled={isActionDisabled}
+      >
+        {icon}
+        <Text style={styles.mainActionButtonText}>{text}</Text>
+      </TouchableOpacity>
+    );
   };
 
   return (
-    <Animated.View style={[
-      styles.card,
-      isActive && styles.activeCard,
-      isRestOverdue && styles.restOverdueCard,
-      { borderLeftColor: getDifficultyColor(exercise.difficulty) },
-      cardTransform
-    ]}>
-      {/* Enhanced Header */}
+    <Animated.View style={[styles.card, isActive && styles.activeCard, isRestOverdue && styles.restOverdueCard, { transform: [{ scale: scaleAnim }], opacity: fadeAnim }]}>
       <View style={styles.header}>
         <View style={styles.titleSection}>
-          <View style={styles.titleContainer}>
-            <Text style={styles.exerciseName}>{exercise.name}</Text>
-            {exercise.difficulty && (
-              <Text style={styles.headerDifficultyEmoji}>
-                {DIFFICULTY_EMOJIS[exercise.difficulty]}
-              </Text>
-            )}
-          </View>
-          <View style={styles.muscleAndStatsRow}>
-            <Text style={styles.muscleGroup}>{exercise.muscle}</Text>
-            <View style={styles.compactStats}>
-              <View style={styles.compactStatItem}>
-                <Text style={styles.compactStatLabel}>الجلسة</Text>
-                <Text style={[styles.compactStatValue, { color: settings.primaryColor }]}>
-                  {exercise.currentSession}/{exercise.sessions}
-                </Text>
-              </View>
-              <View style={styles.compactStatItem}>
-                <Text style={styles.compactStatLabel}>مكتملة</Text>
-                <Text style={[styles.compactStatValue, { color: '#10b981' }]}>
-                  {exercise.completedSessions}/{exercise.sessions}
-                </Text>
-              </View>
-            </View>
-          </View>
+          <Text style={styles.exerciseName} numberOfLines={1}>{exercise.name}</Text>
+          <Text style={styles.muscleGroup}>{exercise.muscle}</Text>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(exercise.status) }]}>
           <Text style={styles.statusText}>{getStatusText(exercise.status)}</Text>
         </View>
       </View>
 
-      {/* Exercise Image Placeholder */}
-      <View style={styles.exerciseImageContainer}>
-        <View style={styles.exerciseImagePlaceholder}>
-          <Text style={styles.exerciseImageText}>صورة توضيحية للتمرين</Text>
-          <Text style={styles.exerciseImageSubtext}>{exercise.name}</Text>
-        </View>
-      </View>
+      {renderMainTimer()}
 
-      {/* Enhanced Timer Section */}
-      <View style={styles.timerSection}>
-        <View style={styles.timersGrid}>
-          <View style={styles.timerCard}>
-            <Clock size={16} color={settings.primaryColor} />
-            <Text style={[styles.timerValue, { color: settings.primaryColor }]}>
-              {formatTime(exercise.exerciseSecondsCurrentSession)}
-            </Text>
-            <Text style={styles.timerLabel}>وقت التمرين</Text>
-          </View>
-          
-          <View style={styles.timerCard}>
-            <Clock size={16} color="#f59e0b" />
-            <Text style={[styles.timerValue, { color: '#f59e0b' }]}>
-              {formatTime(exercise.restSecondsCurrentSession)}
-            </Text>
-            <Text style={styles.timerLabel}>وقت الراحة</Text>
-          </View>
-          
-          {exercise.wastedTimeSeconds > 0 && (
-            <View style={styles.timerCard}>
-              <Clock size={16} color="#ef4444" />
-              <Text style={[styles.timerValue, { color: '#ef4444' }]}>
-                {formatTime(exercise.wastedTimeSeconds)}
-              </Text>
-              <Text style={styles.timerLabel}>وقت ضائع</Text>
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* Enhanced Progress */}
-      <View style={styles.progressContainer}>
-        <View style={styles.progressHeader}>
-          <Text style={styles.progressLabel}>التقدم</Text>
-          <Text style={[styles.progressPercent, { color: settings.primaryColor }]}>
-            {Math.round(progressPercent)}%
-          </Text>
-        </View>
-        <View style={styles.progressBar}>
-          <View 
-            style={[
-              styles.progressFill, 
-              { 
-                width: `${progressPercent}%`,
-                backgroundColor: settings.primaryColor 
-              }
-            ]} 
-          />
-        </View>
-        <Text style={styles.progressText}>
-          {exercise.completedSessions} من {exercise.sessions} جلسة مكتملة
-        </Text>
-      </View>
-
-      {/* Enhanced Controls */}
       <View style={styles.controlsContainer}>
-        <Animated.View style={[styles.animatedButtonWrapper, { transform: [{ scale: buttonPressAnim }] }]}>
-          <TouchableOpacity
-            style={[
-              styles.modernControlButton,
-              { backgroundColor: settings.primaryColor },
-              isStartDisabled && styles.disabledButton
-            ]}
-            onPress={handleStartExercise}
-            disabled={isStartDisabled}
-          >
-            <Play size={14} color="white" />
-            <Text style={styles.modernControlButtonText}>بدء</Text>
-          </TouchableOpacity>
-        </Animated.View>
-
-        <Animated.View style={[styles.animatedButtonWrapper, { transform: [{ scale: buttonPressAnim }] }]}>
-          <TouchableOpacity
-            style={[
-              styles.modernControlButton,
-              exercise.status === 'in-progress' ?
-                { backgroundColor: '#f59e0b' } :
-                exercise.isRestPaused ?
-                { backgroundColor: '#10b981' } :
-                { backgroundColor: settings.primaryColor },
-              isPauseResumeDisabled && styles.disabledButton
-            ]}
-            onPress={handlePauseResume}
-            disabled={isPauseResumeDisabled}
-          >
-            {exercise.status === 'in-progress' ? (
-              <Pause size={14} color="white" />
-            ) : (
-              <Play size={14} color="white" />
-            )}
-            <Text style={styles.modernControlButtonText}>{getPauseResumeText()}</Text>
-          </TouchableOpacity>
-        </Animated.View>
-
-        <Animated.View style={[styles.animatedButtonWrapper, { transform: [{ scale: buttonPressAnim }] }]}>
-          <TouchableOpacity
-            style={[
-              styles.modernControlButton,
-              { backgroundColor: '#10b981' },
-              isFinishDisabled && styles.disabledButton
-            ]}
-            onPress={handleFinish}
-            disabled={isFinishDisabled}
-          >
-            <Square size={14} color="white" />
-            <Text style={styles.modernControlButtonText}>إنهاء</Text>
-          </TouchableOpacity>
-        </Animated.View>
+        {renderMainActionButton()}
+        <TouchableOpacity
+          style={[styles.finishButton, isActionDisabled && styles.disabledButton]}
+          onPress={() => setShowFinishModal(true)}
+          disabled={isActionDisabled}
+        >
+          <Check size={20} color={settings.primaryColor} />
+          <Text style={styles.finishButtonText}>إنهاء الجلسة</Text>
+        </TouchableOpacity>
       </View>
 
-
-
-      {/* Enhanced Sessions Grid */}
       <View style={styles.sessionsContainer}>
-        <Text style={styles.sessionsTitle}>الجلسات ({exercise.completedSessions}/{exercise.sessions})</Text>
+        <Text style={styles.sessionsTitle}>الجلسات المكتملة</Text>
         <View style={styles.sessionsGrid}>
           {Array.from({ length: exercise.sessions }, (_, i) => {
             const sessionNum = i + 1;
             const isCompleted = sessionNum <= exercise.completedSessions;
-            const isCurrentSession = sessionNum === exercise.currentSession && 
-              (exercise.status === 'in-progress' || exercise.status === 'resting');
             const sessionData = exercise.sessionData[sessionNum];
-
             return (
-              <TouchableOpacity 
-                key={sessionNum}
-                style={[
-                  styles.sessionCard,
-                  isCurrentSession && styles.activeSessionCard,
-                  isCompleted && [
-                    styles.completedSessionCard,
-                    { backgroundColor: sessionData ? getDifficultyColor(sessionData.difficulty) : '#10b981' }
-                  ]
-                ]}
-                onPress={() => handleSessionPress(sessionNum)}
-                disabled={!sessionData}
-              >
-                <Text style={[
-                  styles.sessionNumber,
-                  isCompleted && { color: 'white' },
-                  isCurrentSession && { color: settings.primaryColor }
-                ]}>
-                  {sessionNum}
-                </Text>
-                {sessionData && (
-                  <>
-                    <View style={styles.sessionStats}>
-                      <Text style={[
-                        styles.sessionStatText,
-                        isCompleted && { color: 'white' }
-                      ]}>
-                        {sessionData.weight}kg • {sessionData.reps}×
-                      </Text>
-                    </View>
-                    <Text style={styles.sessionEmoji}>
-                      {DIFFICULTY_EMOJIS[sessionData.difficulty]}
-                    </Text>
-                  </>
-                )}
+              <TouchableOpacity key={sessionNum} style={[styles.sessionChip, isCompleted ? { backgroundColor: getDifficultyColor(sessionData?.difficulty || null), borderColor: getDifficultyColor(sessionData?.difficulty || null) } : {}]} onPress={() => handleSessionPress(sessionNum)} disabled={!sessionData}>
+                <Text style={[styles.sessionChipText, isCompleted && { color: 'white' }]}>{sessionNum}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
       </View>
 
-      {/* Finish Session Modal */}
-      <Modal
-        visible={showFinishModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowFinishModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>إنهاء الجلسة {exercise.currentSession}</Text>
-              <TouchableOpacity onPress={() => setShowFinishModal(false)}>
-                <X size={24} color="#6b7280" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>الوزن (كيلو)</Text>
-              <TextInput
-                style={styles.input}
-                value={weight}
-                onChangeText={setWeight}
-                keyboardType="numeric"
-                placeholder="20"
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>عدد العدات</Text>
-              <TextInput
-                style={styles.input}
-                value={reps}
-                onChangeText={setReps}
-                keyboardType="numeric"
-                placeholder="10"
-              />
-            </View>
-
-            <View style={styles.difficultyContainer}>
-              <Text style={styles.inputLabel}>حالة التمرين</Text>
-              <View style={styles.difficultyGrid}>
-                {(['very-easy', 'easy', 'medium', 'hard', 'very-hard'] as DifficultyLevel[]).map((difficulty) => (
-                  <TouchableOpacity
-                    key={difficulty}
-                    style={[
-                      styles.difficultyButton,
-                      selectedDifficulty === difficulty && styles.selectedDifficultyButton
-                    ]}
-                    onPress={() => {
-                      if (difficulty && typeof difficulty === 'string' && difficulty.trim()) {
-                        setSelectedDifficulty(difficulty);
-                      }
-                    }}
-                  >
-                    <Text style={styles.difficultyEmoji}>
-                      {DIFFICULTY_EMOJIS[difficulty]}
-                    </Text>
-                    <Text style={[
-                      styles.difficultyLabel,
-                      selectedDifficulty === difficulty && styles.selectedDifficultyLabel
-                    ]}>
-                      {DIFFICULTY_LABELS[difficulty]}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.submitButton, { backgroundColor: settings.primaryColor }]}
-              onPress={handleFinishSubmit}
-            >
-              <Text style={styles.submitButtonText}>حفظ وإنهاء</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+      {/* Modals remain the same */}
+      <Modal visible={showFinishModal} transparent={true} animationType="slide" onRequestClose={() => setShowFinishModal(false)}>
+        <View style={styles.modalOverlay}><View style={styles.modalContent}><View style={styles.modalHeader}><Text style={styles.modalTitle}>إنهاء الجلسة {exercise.currentSession}</Text><TouchableOpacity onPress={() => setShowFinishModal(false)}><X size={24} color="#6b7280" /></TouchableOpacity></View><View style={styles.inputContainer}><Text style={styles.inputLabel}>الوزن (كيلو)</Text><TextInput style={styles.input} value={weight} onChangeText={setWeight} keyboardType="numeric" placeholder="20" /></View><View style={styles.inputContainer}><Text style={styles.inputLabel}>عدد العدات</Text><TextInput style={styles.input} value={reps} onChangeText={setReps} keyboardType="numeric" placeholder="10" /></View><View style={styles.difficultyContainer}><Text style={styles.inputLabel}>تقييم الصعوبة</Text><View style={styles.difficultyGrid}>{(['very-easy', 'easy', 'medium', 'hard', 'very-hard'] as DifficultyLevel[]).map((difficulty) => (<TouchableOpacity key={difficulty} style={[styles.difficultyButton, selectedDifficulty === difficulty && { borderColor: getDifficultyColor(difficulty), backgroundColor: getDifficultyColor(difficulty)+'20' }]} onPress={() => setSelectedDifficulty(difficulty)}><Text style={styles.difficultyEmoji}>{DIFFICULTY_EMOJIS[difficulty]}</Text><Text style={styles.difficultyLabel}>{DIFFICULTY_LABELS[difficulty]}</Text></TouchableOpacity>))}</View></View><TouchableOpacity style={[styles.submitButton, { backgroundColor: settings.primaryColor }]} onPress={handleFinishSubmit}><Text style={styles.submitButtonText}>حفظ وإنهاء</Text></TouchableOpacity></View></View>
       </Modal>
-
-      {/* Session Details Modal */}
-      <Modal
-        visible={showSessionModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowSessionModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.sessionModalContent}>
-            {selectedSession && exercise.sessionData[selectedSession] && (
-              <>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>تفاصيل الجلسة {selectedSession}</Text>
-                  <TouchableOpacity onPress={() => setShowSessionModal(false)}>
-                    <X size={24} color="#6b7280" />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.sessionDetailContainer}>
-                  <View style={styles.sessionDetailRow}>
-                    <Text style={styles.sessionDetailLabel}>الوزن:</Text>
-                    <Text style={styles.sessionDetailValue}>{exercise.sessionData[selectedSession].weight} كيلو</Text>
-                  </View>
-                  <View style={styles.sessionDetailRow}>
-                    <Text style={styles.sessionDetailLabel}>العدات:</Text>
-                    <Text style={styles.sessionDetailValue}>{exercise.sessionData[selectedSession].reps} عدة</Text>
-                  </View>
-                  <View style={styles.sessionDetailRow}>
-                    <Text style={styles.sessionDetailLabel}>وقت التمرين:</Text>
-                    <Text style={styles.sessionDetailValue}>{formatTime(exercise.sessionData[selectedSession].sessionExerciseDuration)}</Text>
-                  </View>
-                  <View style={styles.sessionDetailRow}>
-                    <Text style={styles.sessionDetailLabel}>وقت الراحة:</Text>
-                    <Text style={styles.sessionDetailValue}>{formatTime(exercise.sessionData[selectedSession].sessionRestDuration)}</Text>
-                  </View>
-                  {exercise.sessionData[selectedSession].wastedTime > 0 && (
-                    <View style={styles.sessionDetailRow}>
-                      <Text style={styles.sessionDetailLabel}>وقت ضائع:</Text>
-                      <Text style={[styles.sessionDetailValue, { color: '#ef4444' }]}>{formatTime(exercise.sessionData[selectedSession].wastedTime)}</Text>
-                    </View>
-                  )}
-                  <View style={styles.sessionDetailRow}>
-                    <Text style={styles.sessionDetailLabel}>الصعوبة:</Text>
-                    <View style={styles.difficultyDisplay}>
-                      <Text style={styles.sessionDetailValue}>{DIFFICULTY_LABELS[exercise.sessionData[selectedSession].difficulty]}</Text>
-                      <Text style={styles.sessionDetailEmoji}>{DIFFICULTY_EMOJIS[exercise.sessionData[selectedSession].difficulty]}</Text>
-                    </View>
-                  </View>
-                </View>
-              </>
-            )}
-          </View>
-        </View>
+      <Modal visible={showSessionModal} transparent={true} animationType="fade" onRequestClose={() => setShowSessionModal(false)}>
+        <View style={styles.modalOverlay}><View style={styles.sessionModalContent}>{selectedSession && exercise.sessionData[selectedSession] && (<><View style={styles.modalHeader}><Text style={styles.modalTitle}>تفاصيل الجلسة {selectedSession}</Text><TouchableOpacity onPress={() => setShowSessionModal(false)}><X size={24} color="#6b7280" /></TouchableOpacity></View><View style={styles.sessionDetailContainer}><View style={styles.sessionDetailRow}><Text style={styles.sessionDetailLabel}>الوزن:</Text><Text style={styles.sessionDetailValue}>{exercise.sessionData[selectedSession].weight} كيلو</Text></View><View style={styles.sessionDetailRow}><Text style={styles.sessionDetailLabel}>العدات:</Text><Text style={styles.sessionDetailValue}>{exercise.sessionData[selectedSession].reps} عدة</Text></View><View style={styles.sessionDetailRow}><Text style={styles.sessionDetailLabel}>الصعوبة:</Text><View style={styles.difficultyDisplay}><Text style={styles.sessionDetailValue}>{DIFFICULTY_LABELS[exercise.sessionData[selectedSession].difficulty]}</Text><Text style={styles.sessionDetailEmoji}>{DIFFICULTY_EMOJIS[exercise.sessionData[selectedSession].difficulty]}</Text></View></View></View></>)}</View></View>
       </Modal>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 14,
-    marginVertical: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 4,
-    borderLeftWidth: 3,
-    borderLeftColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#f1f5f9',
-  },
-  activeCard: {
-    borderWidth: 2,
-    borderColor: '#3b82f6',
-    transform: [{ scale: 1.02 }],
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
-    elevation: 12,
-  },
-  restOverdueCard: {
-    borderLeftColor: '#ef4444',
-    shadowColor: '#ef4444',
-    shadowOpacity: 0.3,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 14,
-  },
-  titleSection: {
-    flex: 1,
-    marginRight: 12,
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  exerciseName: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111827',
-    flex: 1,
-    letterSpacing: -0.2,
-  },
-  headerDifficultyEmoji: {
-    fontSize: 18,
-    marginLeft: 6,
-  },
-  muscleGroup: {
-    fontSize: 13,
-    color: '#6b7280',
-    fontWeight: '600',
-  },
-  muscleAndStatsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 4,
-  },
-  compactStats: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  compactStatItem: {
-    alignItems: 'center',
-  },
-  compactStatLabel: {
-    fontSize: 9,
-    color: '#9ca3af',
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  compactStatValue: {
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  exerciseImageContainer: {
-    marginBottom: 12,
-  },
-  exerciseImagePlaceholder: {
-    height: 120,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-    borderStyle: 'dashed',
-  },
-  exerciseImageText: {
-    fontSize: 14,
-    color: '#6b7280',
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  exerciseImageSubtext: {
-    fontSize: 11,
-    color: '#9ca3af',
-    fontWeight: '500',
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  statusText: {
-    color: 'white',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.1,
-  },
-  timerSection: {
-    alignItems: 'center',
-    marginBottom: 10,
-    backgroundColor: '#f8fafc',
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  timerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  timer: {
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: -0.4,
-  },
-  timerLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-    fontWeight: '600',
-  },
-  detailsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  detailCard: {
-    backgroundColor: '#f8fafc',
-    padding: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    minWidth: 120,
-    gap: 4,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  detailLabel: {
-    fontSize: 11,
-    color: '#6b7280',
-    fontWeight: '600',
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#1f2937',
-    letterSpacing: -0.1,
-  },
-  progressContainer: {
-    marginBottom: 10,
-  },
-  progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  progressLabel: {
-    fontSize: 13,
-    color: '#374151',
-    fontWeight: '600',
-  },
-  progressPercent: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 4,
-    marginBottom: 4,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  progressText: {
-    fontSize: 11,
-    color: '#6b7280',
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  controlsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-    gap: 6,
-  },
-  modernControlButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    gap: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  disabledButton: {
-    backgroundColor: '#9ca3af',
-    opacity: 0.7,
-  },
-  modernControlButtonText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 11,
-    letterSpacing: 0.1,
-  },
-  sessionsContainer: {
-    marginTop: 12,
-  },
-  sessionsTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 8,
-    color: '#111827',
-    letterSpacing: -0.1,
-  },
-  sessionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  sessionCard: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 8,
-    padding: 10,
-    minWidth: 70,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    gap: 4,
-  },
-  activeSessionCard: {
-    borderColor: '#3b82f6',
-    backgroundColor: '#eff6ff',
-    borderWidth: 2,
-  },
-  completedSessionCard: {
-    backgroundColor: '#10b981',
-    borderColor: '#10b981',
-  },
-  sessionNumber: {
-    fontWeight: '800',
-    fontSize: 16,
-    color: '#1f2937',
-  },
-  sessionStats: {
-    alignItems: 'center',
-  },
-  sessionStatText: {
-    fontSize: 10,
-    color: '#6b7280',
-    fontWeight: '600',
-  },
-  sessionEmoji: {
-    fontSize: 14,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
-    width: '100%',
-    maxWidth: 400,
-  },
-  sessionModalContent: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
-    width: '100%',
-    maxWidth: 350,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#f9fafb',
-  },
-  difficultyContainer: {
-    marginBottom: 20,
-  },
-  difficultyGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  difficultyButton: {
-    flex: 1,
-    minWidth: '30%',
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    padding: 8,
-    alignItems: 'center',
-    gap: 4,
-  },
-  selectedDifficultyButton: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#3b82f6',
-    borderWidth: 2,
-  },
-  difficultyEmoji: {
-    fontSize: 20,
-  },
-  difficultyLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  selectedDifficultyLabel: {
-    color: '#3b82f6',
-  },
-  submitButton: {
-    padding: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  submitButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  sessionDetailContainer: {
-    gap: 12,
-  },
-  sessionDetailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  sessionDetailLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  sessionDetailValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  difficultyDisplay: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sessionDetailEmoji: {
-    fontSize: 16,
-  },
-  timersGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    gap: 8,
-  },
-  timerCard: {
-    flex: 1,
-    alignItems: 'center',
-    backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 8,
-    gap: 4,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  timerValue: {
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-  },
-  animatedButtonWrapper: {
-    flex: 1,
-  },
+  card: { backgroundColor: 'white', borderRadius: 16, padding: 16, marginVertical: 8, shadowColor: '#9ca3af', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 5, borderWidth: 1, borderColor: '#e5e7eb' },
+  activeCard: { borderColor: '#3b82f6', shadowColor: '#3b82f6' },
+  restOverdueCard: { borderColor: '#ef4444', shadowColor: '#ef4444' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
+  titleSection: { flex: 1, marginRight: 12 },
+  exerciseName: { fontSize: 20, fontWeight: '800', color: '#111827', marginBottom: 2 },
+  muscleGroup: { fontSize: 14, color: '#6b7280', fontWeight: '600' },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
+  statusText: { color: 'white', fontSize: 11, fontWeight: '700' },
+  mainTimerContainer: { alignItems: 'center', marginVertical: 12, paddingVertical: 10, backgroundColor: '#f8fafc', borderRadius: 12, borderWidth: 1, borderColor: '#f1f5f9' },
+  mainTimerLabel: { fontSize: 14, fontWeight: '600', color: '#6b7280', marginBottom: 4 },
+  mainTimer: { fontSize: 48, fontWeight: '900', letterSpacing: 1 },
+  wastedTimeText: { fontSize: 12, color: '#ef4444', fontWeight: '600', marginTop: 4 },
+  controlsContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginVertical: 16, gap: 12 },
+  mainActionButton: { flexDirection: 'row', flex: 2, alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 12, gap: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 5, elevation: 3 },
+  mainActionButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+  finishButton: { flexDirection: 'row', flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 12, backgroundColor: '#f1f5f9', gap: 6, borderWidth: 1, borderColor: '#e5e7eb' },
+  finishButtonText: { color: '#374151', fontSize: 14, fontWeight: 'bold' },
+  disabledButton: { backgroundColor: '#d1d5db', opacity: 0.8, shadowOpacity: 0 },
+  sessionsContainer: { marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  sessionsTitle: { fontSize: 14, fontWeight: '700', marginBottom: 8, color: '#374151' },
+  sessionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  sessionChip: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e5e7eb' },
+  sessionChipText: { fontSize: 14, fontWeight: 'bold', color: '#6b7280' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { backgroundColor: 'white', borderRadius: 16, padding: 20, width: '100%', maxWidth: 400 },
+  sessionModalContent: { backgroundColor: 'white', borderRadius: 16, padding: 20, width: '100%', maxWidth: 350 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+  inputContainer: { marginBottom: 16 },
+  inputLabel: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 8 },
+  input: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, padding: 12, fontSize: 16, backgroundColor: '#f9fafb' },
+  difficultyContainer: { marginBottom: 20 },
+  difficultyGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8 },
+  difficultyButton: { flex: 1, minWidth: '30%', borderWidth: 2, borderColor: '#e5e7eb', borderRadius: 8, padding: 8, alignItems: 'center', gap: 4 },
+  difficultyEmoji: { fontSize: 20 },
+  difficultyLabel: { fontSize: 10, fontWeight: '600', color: '#6b7280' },
+  submitButton: { padding: 14, borderRadius: 8, alignItems: 'center' },
+  submitButtonText: { color: 'white', fontSize: 16, fontWeight: '700' },
+  sessionDetailContainer: { gap: 12 },
+  sessionDetailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  sessionDetailLabel: { fontSize: 14, fontWeight: '600', color: '#6b7280' },
+  sessionDetailValue: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  difficultyDisplay: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sessionDetailEmoji: { fontSize: 16 },
 });
