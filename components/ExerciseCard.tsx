@@ -40,11 +40,13 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
   const buttonPressAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // I will assume the sound file exists at this path.
-    // If not, the catch block will prevent a crash.
+    // NOTE: Sound feature is temporarily disabled as the asset file is missing.
+    // To enable, add 'click.mp3' to 'assets/sounds/' and uncomment the following lines.
+    /*
     Audio.Sound.createAsync(require('@/assets/sounds/click.mp3'))
       .then(response => setSound(response.sound))
       .catch(() => console.log("Could not load sound asset. Sound will be disabled."));
+    */
 
     return () => {
       sound?.unloadAsync();
