@@ -64,8 +64,6 @@ export default function CurrentExerciseScreen() {
 
   // Calculate total times
   const totalExerciseTime = exercisesToRender.reduce((sum, e) => sum + e.totalExerciseSecondsAccumulated, 0);
-  const totalRestTime = exercisesToRender.reduce((sum, e) => sum + e.totalRestSecondsAccumulated, 0);
-  const totalWastedTime = exercisesToRender.reduce((sum, e) => sum + e.wastedTimeSeconds, 0);
 
   const handleSessionToggle = () => {
     if (sessionStarted) {
@@ -141,66 +139,42 @@ export default function CurrentExerciseScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]} testID="current-screen">
-      {/* Compact Session Control Card */}
+      {/* Improved Session Control Card */}
       <View style={styles.compactSessionCard}>
-        <View style={styles.compactContent}>
+        <View style={styles.sessionHeader}>
+          <Text style={styles.sessionTitle}>نظرة عامة على الجلسة</Text>
           <TouchableOpacity
-            style={[
-              styles.compactButton,
-              { backgroundColor: sessionStarted ? '#ef4444' : settings.primaryColor }
-            ]}
+            style={[styles.compactButton, { backgroundColor: sessionStarted ? '#ef4444' : settings.primaryColor }]}
             onPress={handleSessionToggle}
             testID="toggle-session"
           >
-            {sessionStarted ? (
-              <Pause size={14} color="white" />
-            ) : (
-              <Play size={14} color="white" />
-            )}
-            <Text style={styles.compactButtonText}>
-              {sessionStarted ? 'إنهاء الجلسة' : 'بدء الجلسة'}
-            </Text>
+            {sessionStarted ? <Pause size={14} color="white" /> : <Play size={14} color="white" />}
+            <Text style={styles.compactButtonText}>{sessionStarted ? 'إنهاء' : 'بدء'}</Text>
           </TouchableOpacity>
+        </View>
 
-          <View style={styles.compactStats}>
-            <Text style={[styles.compactTime, { color: settings.primaryColor }]}>
-              {formatTime(sessionSeconds)}
-            </Text>
-            <View style={styles.compactStatsRow}>
-              <Text style={styles.compactProgress}>
-                {Math.round(progressPercent)}% • {completedExercisesCount}/{totalExercisesCount} تمرين
-              </Text>
-              <Text style={styles.compactSessions}>
-                {completedSessions}/{totalSessions} جلسة
-              </Text>
-            </View>
-            <View style={styles.compactTimesRow}>
-              <Text style={styles.compactTimeItem}>
-                تمرين: {formatTime(totalExerciseTime)}
-              </Text>
-              <Text style={styles.compactTimeItem}>
-                راحة: {formatTime(totalRestTime)}
-              </Text>
-              {totalWastedTime > 0 && (
-                <Text style={[styles.compactTimeItem, { color: '#ef4444' }]}>
-                  ضائع: {formatTime(totalWastedTime)}
-                </Text>
-              )}
-            </View>
+        <View style={styles.mainStatsContainer}>
+          <Text style={styles.mainTimerLabel}>الوقت الإجمالي</Text>
+          <Text style={[styles.mainTimer, { color: settings.primaryColor }]}>{formatTime(sessionSeconds)}</Text>
+        </View>
+
+        <View style={styles.secondaryStatsContainer}>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{completedExercisesCount}/{totalExercisesCount}</Text>
+            <Text style={styles.statLabel}>التمارين</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{completedSessions}/{totalSessions}</Text>
+            <Text style={styles.statLabel}>الجلسات</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{formatTime(totalExerciseTime)}</Text>
+            <Text style={styles.statLabel}>وقت التمرين</Text>
           </View>
         </View>
 
-        {/* Compact Progress Bar */}
         <View style={styles.compactProgressBar}>
-          <View
-            style={[
-              styles.compactProgressFill,
-              {
-                width: `${progressPercent}%`,
-                backgroundColor: settings.primaryColor
-              }
-            ]}
-          />
+          <View style={[styles.compactProgressFill, { width: `${progressPercent}%`, backgroundColor: settings.primaryColor }]} />
         </View>
       </View>
 
@@ -339,97 +313,85 @@ const styles = StyleSheet.create({
   },
   compactSessionCard: {
     backgroundColor: 'white',
-    borderRadius: 12,
+    borderRadius: 16,
     marginHorizontal: 16,
     marginBottom: 16,
-    padding: 12,
+    padding: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
-  compactContent: {
+  sessionHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sessionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#374151',
   },
   compactButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 8,
-    gap: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 2,
+    gap: 6,
   },
   compactButtonText: {
     color: 'white',
-    fontWeight: '700',
-    fontSize: 12,
+    fontWeight: 'bold',
+    fontSize: 14,
   },
-  compactStats: {
-    flex: 1,
+  mainStatsContainer: {
     alignItems: 'center',
-    gap: 2,
-    marginLeft: 12,
+    marginVertical: 12,
   },
-  compactTime: {
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: -0.3,
-  },
-  compactProgress: {
-    fontSize: 11,
+  mainTimerLabel: {
+    fontSize: 14,
     color: '#6b7280',
-    fontWeight: '600',
+    marginBottom: 4,
+  },
+  mainTimer: {
+    fontSize: 40,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  secondaryStatsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 16,
+    paddingVertical: 10,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+  },
+  statBox: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#6b7280',
   },
   compactProgressBar: {
-    height: 4,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 2,
+    height: 6,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 3,
     overflow: 'hidden',
   },
   compactProgressFill: {
     height: '100%',
-    borderRadius: 2,
-  },
-  compactStatsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-    gap: 8,
-  },
-  compactSessions: {
-    fontSize: 10,
-    color: '#6b7280',
-    fontWeight: '600',
-    backgroundColor: '#f1f5f9',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  compactTimesRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
-    gap: 8,
-  },
-  compactTimeItem: {
-    fontSize: 9,
-    color: '#6b7280',
-    fontWeight: '600',
-    backgroundColor: '#f8fafc',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
     borderRadius: 3,
   },
   modalOverlay: {
