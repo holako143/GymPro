@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Animated, Easing } from 'react-native';
 import { Exercise, DIFFICULTY_EMOJIS, DifficultyLevel, DIFFICULTY_LABELS } from '@/types/fitness';
 import { useFitnessStore } from '@/hooks/useFitnessStore';
-import { Play, Pause, Square, Clock, Target, X, Dumbbell, Volume2, VolumeX, CheckCircle2 } from 'lucide-react-native';
+import { Play, Pause, Square, Clock, Target, X, Dumbbell, Volume2, VolumeX, CheckCircle2, FastForward } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
 
@@ -16,6 +16,7 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
     startExerciseTimer, 
     pauseExerciseTimer,
     finishSession,
+    skipRest,
     formatTime,
     settings,
     updateState,
@@ -346,6 +347,10 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
             <Text style={[styles.mainTimerValue, { color: '#f59e0b' }]}>
               {formatTime(exercise.restSecondsCurrentSession)}
             </Text>
+            <TouchableOpacity style={styles.skipButton} onPress={() => skipRest(exercise.id)}>
+              <FastForward size={16} color="white" />
+              <Text style={styles.skipButtonText}>تخطي الراحة</Text>
+            </TouchableOpacity>
           </View>
         )}
         {exercise.status === 'completed' && (
@@ -1096,5 +1101,20 @@ const styles = StyleSheet.create({
   },
   animatedButtonWrapper: {
     flex: 1,
+  },
+  skipButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f59e0b',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginTop: 10,
+    gap: 6,
+  },
+  skipButtonText: {
+    color: 'white',
+    fontWeight: '700',
+    fontSize: 12,
   },
 });

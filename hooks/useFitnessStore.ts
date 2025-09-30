@@ -331,7 +331,7 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     });
   }, [state.exercises, state.trainingPlans, state.plannedWorkouts, updateState]);
 
-  const replaceAllExercises = useCallback((newExercises: Exercise[]) => {
+  const skipRest = useCallback((exerciseId: number) => {
     const nextId = Math.max(...newExercises.map(e => e.id), 0) + 1;
     updateState({
       exercises: newExercises,
@@ -893,6 +893,7 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     
     // State updates
     updateState,
-    replaceAllExercises
-  }), [state, formatTime, calculate1RM, playSound, addExercise, updateExercise, deleteExercise, startExerciseTimer, pauseExerciseTimer, resumeExerciseTimer, finishSession, startGlobalSession, stopGlobalSession, addTrainingPlan, updateTrainingPlan, deleteTrainingPlan, activateTrainingPlan, deactivateAllPlans, addNotification, updateNotification, deleteNotification, updateSettings, updateState, replaceAllExercises]);
+    replaceAllExercises,
+    skipRest
+  }), [state, formatTime, calculate1RM, playSound, addExercise, updateExercise, deleteExercise, startExerciseTimer, pauseExerciseTimer, resumeExerciseTimer, finishSession, startGlobalSession, stopGlobalSession, addTrainingPlan, updateTrainingPlan, deleteTrainingPlan, activateTrainingPlan, deactivateAllPlans, addNotification, updateNotification, deleteNotification, updateSettings, updateState, replaceAllExercises, skipRest]);
 });
