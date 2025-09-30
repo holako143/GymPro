@@ -421,8 +421,8 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
           <TouchableOpacity
             style={[
               styles.modernControlButton,
-              exercise.status === 'in-progress' ? 
-                { backgroundColor: '#f59e0b' } : 
+              exercise.status === 'in-progress' ?
+                { backgroundColor: '#f59e0b' } :
                 exercise.isRestPaused ?
                 { backgroundColor: '#10b981' } :
                 { backgroundColor: settings.primaryColor },

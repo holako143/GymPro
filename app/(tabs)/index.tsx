@@ -31,7 +31,6 @@ export default function CurrentExerciseScreen() {
     currentExercise,
     sessionStarted,
     sessionSeconds,
-    sessionHistory,
     formatTime,
     startGlobalSession,
     stopGlobalSession,
@@ -47,7 +46,7 @@ export default function CurrentExerciseScreen() {
   const [completedExerciseIds, setCompletedExerciseIds] = useState<Set<number>>(new Set());
 
   // Get exercises to display
-  const exercisesToRender = activePlanId !== null ? 
+  const exercisesToRender = activePlanId !== null ?
     exercises.filter(exercise => {
       const activePlan = trainingPlans.find(p => p.id === activePlanId);
       return activePlan ? activePlan.exercises.includes(exercise.id) : false;
@@ -56,7 +55,7 @@ export default function CurrentExerciseScreen() {
   // Calculate progress
   const completedExercisesCount = exercisesToRender.filter(e => e.status === 'completed').length;
   const totalExercisesCount = exercisesToRender.length;
-  const progressPercent = totalExercisesCount > 0 ? 
+  const progressPercent = totalExercisesCount > 0 ?
     (completedExercisesCount / totalExercisesCount) * 100 : 0;
 
   // Calculate total sessions
@@ -89,7 +88,7 @@ export default function CurrentExerciseScreen() {
 
   // Auto-scroll only when exercise is completed and moving to next
   const [shouldAutoScroll, setShouldAutoScroll] = useState<boolean>(false);
-  
+
   useEffect(() => {
     if (shouldAutoScroll && currentExercise && scrollViewRef.current) {
       const currentIndex = exercisesToRender.findIndex(e => e.id === currentExercise);
@@ -193,14 +192,14 @@ export default function CurrentExerciseScreen() {
 
         {/* Compact Progress Bar */}
         <View style={styles.compactProgressBar}>
-          <View 
+          <View
             style={[
-              styles.compactProgressFill, 
-              { 
+              styles.compactProgressFill,
+              {
                 width: `${progressPercent}%`,
-                backgroundColor: settings.primaryColor 
+                backgroundColor: settings.primaryColor
               }
-            ]} 
+            ]}
           />
         </View>
       </View>

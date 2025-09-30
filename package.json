@@ -6,8 +6,7 @@
     "start": "bunx rork start -p qreucjy2fsd7wq0ey6lhs --tunnel",
     "start-web": "bunx rork start -p qreucjy2fsd7wq0ey6lhs --web --tunnel",
     "start-web-dev": "DEBUG=expo* bunx rork start -p qreucjy2fsd7wq0ey6lhs --web --tunnel",
-    "lint": "expo lint",
-    "build:web": "expo export -p web"
+    "lint": "expo lint"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
@@ -39,6 +38,7 @@
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-native": "0.79.1",
+    "react-native-calendars": "^1.1304.1",
     "react-native-gesture-handler": "~2.24.0",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.10.0",
