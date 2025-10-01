@@ -14,7 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitnessStore } from '@/hooks/useFitnessStore';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
-import { Plus, Edit, Trash2, X, Dumbbell, Search, Play, CheckCircle, XCircle, Award } from 'lucide-react-native';
+import { Plus, Edit, Trash2, X, Dumbbell, Search, Play, CheckCircle } from 'lucide-react-native';
 import { MUSCLE_GROUPS, Exercise, TrainingPlan } from '@/types/fitness';
 import { EXERCISE_DATABASE, getDifficultyLabel, getEquipmentLabel, ExerciseTemplate } from '@/constants/exerciseDatabase';
 
@@ -84,52 +84,49 @@ const ExercisesView = () => {
 
 // AnalyticsView Component
 const AnalyticsView = () => {
-    const { sessionHistory, exercises, formatTime, calculateWorkoutEfficiency, settings } = useFitnessStore();
+    const { sessionHistory, exercises, formatTime, trainingPlans, settings } = useFitnessStore();
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-
-    const totalExerciseTime = exercises.reduce((sum, ex) => sum + ex.totalExerciseSecondsAccumulated, 0);
-    const totalRestTime = exercises.reduce((sum, ex) => sum + ex.totalRestSecondsAccumulated, 0);
-    const cumulativeWastedTime = exercises.reduce((sum, ex) => sum + ex.wastedTimeSeconds, 0);
-    const totalSessionTime = totalExerciseTime + totalRestTime;
-    const timeEfficiency = totalSessionTime > 0 ? Math.round((totalExerciseTime / totalSessionTime) * 100) : 0;
-
-    const { level, color } = useMemo(() => {
-        if (timeEfficiency >= 80) return { level: 'ذهبي', color: '#ffd700' };
-        if (timeEfficiency >= 70) return { level: 'فضي', color: '#c0c0c0' };
-        if (timeEfficiency >= 60) return { level: 'برونزي', color: '#cd7f32' };
-        return { level: 'بحاجة للتحسين', color: '#6b7280' };
-    }, [timeEfficiency]);
+    const [compareMuscle, setCompareMuscle] = useState<string | null>(null);
+    const [sessionAId, setSessionAId] = useState<number | null>(null);
+    const [sessionBId, setSessionBId] = useState<number | null>(null);
 
     const markedDates = useMemo(() => {
         const markings: { [key: string]: any } = {};
         sessionHistory.forEach(session => { const date = new Date(session.startTime).toISOString().split('T')[0]; markings[date] = { marked: true, dotColor: settings.primaryColor }; });
-        if (markings[selectedDate]) { markings[selectedDate].selected = true; } else { markings[selectedDate] = { selected: true, selectedColor: settings.secondaryColor }; }
+        if (selectedDate) markings[selectedDate] = { ...markings[selectedDate], selected: true, selectedColor: settings.secondaryColor };
         return markings;
     }, [sessionHistory, selectedDate, settings.primaryColor, settings.secondaryColor]);
-    const sessionsForSelectedDay = useMemo(() => sessionHistory.filter(session => new Date(session.startTime).toISOString().startsWith(selectedDate)).sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()), [sessionHistory, selectedDate]);
+
+    const sessionsForMuscle = useMemo(() => {
+        if (!compareMuscle) return [];
+        return sessionHistory.filter(session => {
+            const plan = trainingPlans.find(p => p.id === session.planId);
+            return plan && plan.exercises.some(exId => exercises.find(e => e.id === exId)?.muscle === compareMuscle);
+        });
+    }, [compareMuscle, sessionHistory, trainingPlans, exercises]);
 
     return (
         <View style={styles.viewContainer}>
             <View style={styles.analyticsCard}>
-                <Text style={[styles.cardTitle, { color: settings.primaryColor }]}>تحدي الوقت الذهبي</Text>
-                <View style={styles.challengeCard}>
-                    <Award size={48} color={color} />
-                    <View>
-                        <Text style={[styles.challengeLevel, {color: color}]}>مستواك: {level}</Text>
-                        <Text style={styles.challengeDescription}>حافظ على كفاءة وقت تزيد عن 80% للوصول للمستوى الذهبي!</Text>
-                    </View>
+                <Text style={[styles.cardTitle, { color: settings.primaryColor }]}>مقارنة أداء العضلات</Text>
+                <View style={styles.pickerContainer}>
+                    <Text style={styles.pickerLabel}>اختر مجموعة عضلية:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>{MUSCLE_GROUPS.map(m => <TouchableOpacity key={m} style={[styles.muscleChip, compareMuscle === m && styles.muscleChipSelected]} onPress={() => setCompareMuscle(m)}><Text style={[styles.muscleChipText, compareMuscle === m && styles.muscleChipTextSelected]}>{m}</Text></TouchableOpacity>)}</ScrollView>
                 </View>
+                {compareMuscle && (
+                    <View style={styles.sessionPickers}>
+                        <View style={styles.pickerContainer}>
+                            <Text style={styles.pickerLabel}>الجلسة 1 (الأقدم):</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>{sessionsForMuscle.map(s => <TouchableOpacity key={s.id} style={[styles.sessionChip, sessionAId === s.id && styles.sessionChipSelected]} onPress={() => setSessionAId(s.id)}><Text style={[styles.sessionChipText, sessionAId === s.id && styles.sessionChipTextSelected]}>{new Date(s.startTime).toLocaleDateString('ar-EG')}</Text></TouchableOpacity>)}</ScrollView>
+                        </View>
+                        <View style={styles.pickerContainer}>
+                            <Text style={styles.pickerLabel}>الجلسة 2 (الأحدث):</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>{sessionsForMuscle.map(s => <TouchableOpacity key={s.id} style={[styles.sessionChip, sessionBId === s.id && styles.sessionChipSelected]} onPress={() => setSessionBId(s.id)}><Text style={[styles.sessionChipText, sessionBId === s.id && styles.sessionChipTextSelected]}>{new Date(s.startTime).toLocaleDateString('ar-EG')}</Text></TouchableOpacity>)}</ScrollView>
+                        </View>
+                    </View>
+                )}
             </View>
-
-            <View style={styles.analyticsCard}>
-                <Text style={[styles.cardTitle, { color: settings.primaryColor }]}>لوحة معلومات استغلال الوقت</Text>
-                <View style={styles.timeUtilCard}><Text style={styles.timeUtilLabel}>كفاءة الوقت</Text><Text style={styles.timeUtilValue}>{timeEfficiency}%</Text><View style={styles.timeUtilBar}><View style={[styles.timeUtilFill, { width: `${timeEfficiency}%`, backgroundColor: settings.primaryColor }]} /></View></View>
-                <View style={styles.timeUtilCard}><Text style={styles.timeUtilLabel}>إجمالي الوقت الضائع</Text><Text style={[styles.timeUtilValue, { color: '#ef4444' }]}>{formatTime(cumulativeWastedTime)}</Text><Text style={styles.timeUtilSubtext}>ما يعادل {Math.floor(cumulativeWastedTime / 60)} دقيقة ضائعة!</Text></View>
-            </View>
-
-            <View style={styles.analyticsCard}><Text style={[styles.cardTitle, { color: settings.primaryColor }]}>التسلسل الزمني للجلسة</Text><View style={styles.timelineContainer}>{totalSessionTime > 0 ? (<><View style={[styles.timelineSegment, { flex: totalExerciseTime, backgroundColor: settings.primaryColor }]} /><View style={[styles.timelineSegment, { flex: totalRestTime, backgroundColor: '#f59e0b' }]} /></>) : (<Text style={styles.emptyText}>لا توجد بيانات لعرضها.</Text>)}</View><View style={styles.legendContainer}><View style={styles.legendItem}><View style={[styles.legendIndicator, { backgroundColor: settings.primaryColor }]} /><Text style={styles.legendText}>وقت التمرين</Text></View><View style={styles.legendItem}><View style={[styles.legendIndicator, { backgroundColor: '#f59e0b' }]} /><Text style={styles.legendText}>وقت الراحة</Text></View></View></View>
             <View style={styles.analyticsCard}><Text style={[styles.cardTitle, { color: settings.primaryColor }]}>تقويم الجلسات</Text><Calendar onDayPress={(day) => setSelectedDate(day.dateString)} markedDates={markedDates} theme={{ backgroundColor: '#ffffff', calendarBackground: '#ffffff', textSectionTitleColor: '#b6c1cd', selectedDayBackgroundColor: settings.primaryColor, selectedDayTextColor: '#ffffff', todayTextColor: settings.primaryColor, dayTextColor: '#2d4150', arrowColor: settings.primaryColor, monthTextColor: settings.primaryColor }} style={styles.calendar} /></View>
-            <View style={styles.analyticsCard}><Text style={[styles.cardTitle, { color: settings.primaryColor }]}>جلسات يوم {selectedDate}</Text>{sessionsForSelectedDay.length > 0 ? (sessionsForSelectedDay.map(session => (<View key={session.id} style={styles.sessionCard}><Text style={styles.sessionPlanName}>{session.planName}</Text><Text style={styles.sessionTime}>{new Date(session.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</Text></View>))) : (<Text style={styles.emptyText}>لا توجد جلسات في هذا اليوم.</Text>)}</View>
         </View>
     );
 };
@@ -251,19 +248,21 @@ const styles = StyleSheet.create({
     exerciseSelectItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
     exerciseSelectItemSelected: { backgroundColor: '#eff6ff' }, exerciseSelectInfo: { flex: 1 }, exerciseSelectName: { fontSize: 14, fontWeight: '600', color: '#111827', marginBottom: 2 },
     exerciseSelectMuscle: { fontSize: 12, color: '#6b7280' },
-    timeUtilCard: { alignItems: 'center', padding: 10, backgroundColor: '#f8fafc', borderRadius: 10, marginBottom: 10 },
-    timeUtilLabel: { fontSize: 14, fontWeight: '600', color: '#374151' },
-    timeUtilValue: { fontSize: 28, fontWeight: '800', marginVertical: 4 },
-    timeUtilSubtext: { fontSize: 12, color: '#6b7280' },
-    timeUtilBar: { width: '80%', height: 8, backgroundColor: '#e5e7eb', borderRadius: 4, marginTop: 8, overflow: 'hidden' },
-    timeUtilFill: { height: '100%', borderRadius: 4 },
-    timelineContainer: { flexDirection: 'row', height: 20, borderRadius: 10, overflow: 'hidden', backgroundColor: '#e5e7eb' },
-    timelineSegment: { height: '100%' },
-    legendContainer: { flexDirection: 'row', justifyContent: 'center', gap: 16, marginTop: 8 },
-    legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    legendIndicator: { width: 10, height: 10, borderRadius: 5 },
-    legendText: { fontSize: 12, color: '#6b7280' },
-    challengeCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 12, padding: 16, gap: 16 },
-    challengeLevel: { fontSize: 18, fontWeight: 'bold' },
-    challengeDescription: { fontSize: 13, color: '#6b7280', marginTop: 4 },
+    pickerContainer: { marginBottom: 12 }, pickerLabel: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 8 },
+    sessionPickers: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+    muscleChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e5e7eb', marginRight: 8 },
+    muscleChipSelected: { backgroundColor: '#4361ee', borderColor: '#4361ee' },
+    muscleChipText: { fontSize: 13, fontWeight: '600', color: '#374151' },
+    muscleChipTextSelected: { color: 'white' },
+    sessionChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e5e7eb', marginRight: 8 },
+    sessionChipSelected: { backgroundColor: '#3f37c9', borderColor: '#3f37c9' },
+    sessionChipText: { fontSize: 13, fontWeight: '600', color: '#374151' },
+    sessionChipTextSelected: { color: 'white' },
+    comparisonContainer: { marginTop: 16, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8 },
+    comparisonHeaderRow: { flexDirection: 'row', backgroundColor: '#f8fafc', padding: 8, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
+    comparisonHeader: { flex: 1, fontWeight: 'bold', color: '#374151', textAlign: 'center' },
+    comparisonRow: { flexDirection: 'row', padding: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+    comparisonLabel: { flex: 1, fontWeight: '600' },
+    comparisonValue: { flex: 1, textAlign: 'center' },
+    comparisonDelta: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4 },
 });
