@@ -31,6 +31,7 @@ export interface SessionData {
   volume: number;
   startTime: string;
   endTime: string;
+  restReason?: string;
 }
 
 export interface TrainingPlan {

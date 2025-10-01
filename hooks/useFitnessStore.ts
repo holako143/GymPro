@@ -241,6 +241,16 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     return Math.round(weight * (1 + (reps / 30)));
   }, []);
 
+  // Calculate Workout Efficiency
+  const calculateWorkoutEfficiency = useCallback((session: SessionData): number => {
+    const restInMinutes = session.sessionRestDuration / 60;
+    if (!restInMinutes || restInMinutes === 0) {
+      return session.volume || 0; // Return volume if rest is zero to avoid division by zero
+    }
+    const efficiency = session.volume / restInMinutes;
+    return Math.round(efficiency);
+  }, []);
+
   // Play sound effect
   const playSound = useCallback(async (soundType: 'start' | 'pause' | 'finish' | 'rest' | 'resume') => {
     try {
@@ -461,7 +471,7 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     playSound('resume');
   }, [state.exercises, startExerciseTimer, playSound, updateExercise]);
 
-  const finishSession = useCallback((exerciseId: number, sessionNumber: number, weight: number, reps: number, difficulty: DifficultyLevel) => {
+  const finishSession = useCallback((exerciseId: number, sessionNumber: number, weight: number, reps: number, difficulty: DifficultyLevel, restReason?: string) => {
     const exercise = state.exercises.find(e => e.id === exerciseId);
     if (!exercise) return;
 
@@ -489,7 +499,8 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
       oneRM,
       volume,
       startTime: new Date(Date.now() - exercise.exerciseSecondsCurrentSession * 1000).toISOString(),
-      endTime: now
+      endTime: now,
+      restReason: restReason,
     };
 
     const updatedSessionData = { ...exercise.sessionData, [sessionNumber]: sessionData };
@@ -821,6 +832,7 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     // Helpers
     formatTime,
     calculate1RM,
+    calculateWorkoutEfficiency,
     playSound,
     
     // Exercise management

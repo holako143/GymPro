@@ -14,7 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitnessStore } from '@/hooks/useFitnessStore';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
-import { Plus, Edit, Trash2, X, Dumbbell, Search, Play, CheckCircle, XCircle } from 'lucide-react-native';
+import { Plus, Edit, Trash2, X, Dumbbell, Search, Play, CheckCircle, XCircle, Award } from 'lucide-react-native';
 import { MUSCLE_GROUPS, Exercise, TrainingPlan } from '@/types/fitness';
 import { EXERCISE_DATABASE, getDifficultyLabel, getEquipmentLabel, ExerciseTemplate } from '@/constants/exerciseDatabase';
 
@@ -84,8 +84,22 @@ const ExercisesView = () => {
 
 // AnalyticsView Component
 const AnalyticsView = () => {
-    const { sessionHistory, settings } = useFitnessStore();
+    const { sessionHistory, exercises, formatTime, calculateWorkoutEfficiency, settings } = useFitnessStore();
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
+    const totalExerciseTime = exercises.reduce((sum, ex) => sum + ex.totalExerciseSecondsAccumulated, 0);
+    const totalRestTime = exercises.reduce((sum, ex) => sum + ex.totalRestSecondsAccumulated, 0);
+    const cumulativeWastedTime = exercises.reduce((sum, ex) => sum + ex.wastedTimeSeconds, 0);
+    const totalSessionTime = totalExerciseTime + totalRestTime;
+    const timeEfficiency = totalSessionTime > 0 ? Math.round((totalExerciseTime / totalSessionTime) * 100) : 0;
+
+    const { level, color } = useMemo(() => {
+        if (timeEfficiency >= 80) return { level: 'ذهبي', color: '#ffd700' };
+        if (timeEfficiency >= 70) return { level: 'فضي', color: '#c0c0c0' };
+        if (timeEfficiency >= 60) return { level: 'برونزي', color: '#cd7f32' };
+        return { level: 'بحاجة للتحسين', color: '#6b7280' };
+    }, [timeEfficiency]);
+
     const markedDates = useMemo(() => {
         const markings: { [key: string]: any } = {};
         sessionHistory.forEach(session => { const date = new Date(session.startTime).toISOString().split('T')[0]; markings[date] = { marked: true, dotColor: settings.primaryColor }; });
@@ -96,6 +110,24 @@ const AnalyticsView = () => {
 
     return (
         <View style={styles.viewContainer}>
+            <View style={styles.analyticsCard}>
+                <Text style={[styles.cardTitle, { color: settings.primaryColor }]}>تحدي الوقت الذهبي</Text>
+                <View style={styles.challengeCard}>
+                    <Award size={48} color={color} />
+                    <View>
+                        <Text style={[styles.challengeLevel, {color: color}]}>مستواك: {level}</Text>
+                        <Text style={styles.challengeDescription}>حافظ على كفاءة وقت تزيد عن 80% للوصول للمستوى الذهبي!</Text>
+                    </View>
+                </View>
+            </View>
+
+            <View style={styles.analyticsCard}>
+                <Text style={[styles.cardTitle, { color: settings.primaryColor }]}>لوحة معلومات استغلال الوقت</Text>
+                <View style={styles.timeUtilCard}><Text style={styles.timeUtilLabel}>كفاءة الوقت</Text><Text style={styles.timeUtilValue}>{timeEfficiency}%</Text><View style={styles.timeUtilBar}><View style={[styles.timeUtilFill, { width: `${timeEfficiency}%`, backgroundColor: settings.primaryColor }]} /></View></View>
+                <View style={styles.timeUtilCard}><Text style={styles.timeUtilLabel}>إجمالي الوقت الضائع</Text><Text style={[styles.timeUtilValue, { color: '#ef4444' }]}>{formatTime(cumulativeWastedTime)}</Text><Text style={styles.timeUtilSubtext}>ما يعادل {Math.floor(cumulativeWastedTime / 60)} دقيقة ضائعة!</Text></View>
+            </View>
+
+            <View style={styles.analyticsCard}><Text style={[styles.cardTitle, { color: settings.primaryColor }]}>التسلسل الزمني للجلسة</Text><View style={styles.timelineContainer}>{totalSessionTime > 0 ? (<><View style={[styles.timelineSegment, { flex: totalExerciseTime, backgroundColor: settings.primaryColor }]} /><View style={[styles.timelineSegment, { flex: totalRestTime, backgroundColor: '#f59e0b' }]} /></>) : (<Text style={styles.emptyText}>لا توجد بيانات لعرضها.</Text>)}</View><View style={styles.legendContainer}><View style={styles.legendItem}><View style={[styles.legendIndicator, { backgroundColor: settings.primaryColor }]} /><Text style={styles.legendText}>وقت التمرين</Text></View><View style={styles.legendItem}><View style={[styles.legendIndicator, { backgroundColor: '#f59e0b' }]} /><Text style={styles.legendText}>وقت الراحة</Text></View></View></View>
             <View style={styles.analyticsCard}><Text style={[styles.cardTitle, { color: settings.primaryColor }]}>تقويم الجلسات</Text><Calendar onDayPress={(day) => setSelectedDate(day.dateString)} markedDates={markedDates} theme={{ backgroundColor: '#ffffff', calendarBackground: '#ffffff', textSectionTitleColor: '#b6c1cd', selectedDayBackgroundColor: settings.primaryColor, selectedDayTextColor: '#ffffff', todayTextColor: settings.primaryColor, dayTextColor: '#2d4150', arrowColor: settings.primaryColor, monthTextColor: settings.primaryColor }} style={styles.calendar} /></View>
             <View style={styles.analyticsCard}><Text style={[styles.cardTitle, { color: settings.primaryColor }]}>جلسات يوم {selectedDate}</Text>{sessionsForSelectedDay.length > 0 ? (sessionsForSelectedDay.map(session => (<View key={session.id} style={styles.sessionCard}><Text style={styles.sessionPlanName}>{session.planName}</Text><Text style={styles.sessionTime}>{new Date(session.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</Text></View>))) : (<Text style={styles.emptyText}>لا توجد جلسات في هذا اليوم.</Text>)}</View>
         </View>
@@ -219,4 +251,19 @@ const styles = StyleSheet.create({
     exerciseSelectItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
     exerciseSelectItemSelected: { backgroundColor: '#eff6ff' }, exerciseSelectInfo: { flex: 1 }, exerciseSelectName: { fontSize: 14, fontWeight: '600', color: '#111827', marginBottom: 2 },
     exerciseSelectMuscle: { fontSize: 12, color: '#6b7280' },
+    timeUtilCard: { alignItems: 'center', padding: 10, backgroundColor: '#f8fafc', borderRadius: 10, marginBottom: 10 },
+    timeUtilLabel: { fontSize: 14, fontWeight: '600', color: '#374151' },
+    timeUtilValue: { fontSize: 28, fontWeight: '800', marginVertical: 4 },
+    timeUtilSubtext: { fontSize: 12, color: '#6b7280' },
+    timeUtilBar: { width: '80%', height: 8, backgroundColor: '#e5e7eb', borderRadius: 4, marginTop: 8, overflow: 'hidden' },
+    timeUtilFill: { height: '100%', borderRadius: 4 },
+    timelineContainer: { flexDirection: 'row', height: 20, borderRadius: 10, overflow: 'hidden', backgroundColor: '#e5e7eb' },
+    timelineSegment: { height: '100%' },
+    legendContainer: { flexDirection: 'row', justifyContent: 'center', gap: 16, marginTop: 8 },
+    legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    legendIndicator: { width: 10, height: 10, borderRadius: 5 },
+    legendText: { fontSize: 12, color: '#6b7280' },
+    challengeCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 12, padding: 16, gap: 16 },
+    challengeLevel: { fontSize: 18, fontWeight: 'bold' },
+    challengeDescription: { fontSize: 13, color: '#6b7280', marginTop: 4 },
 });

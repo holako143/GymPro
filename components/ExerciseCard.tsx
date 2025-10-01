@@ -69,11 +69,16 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
     }
   };
 
+  const [restReason, setRestReason] = useState<string>('');
+  const PREDEFINED_REASONS = ["انتظار المعدات", "حديث اجتماعي", "تعب شديد", "تمرين شاق"];
+
   const handleFinishSubmit = () => {
     const weightNum = parseFloat(weight) || 20;
     const repsNum = parseInt(reps) || 10;
-    finishSession(exercise.id, exercise.currentSession, weightNum, repsNum, selectedDifficulty);
+    const finalRestReason = restReason.trim() || undefined;
+    finishSession(exercise.id, exercise.currentSession, weightNum, repsNum, selectedDifficulty, finalRestReason);
     setShowFinishModal(false);
+    setRestReason('');
   };
 
   const handleSessionPress = (sessionNum: number) => {
@@ -186,7 +191,19 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
 
       {/* Modals remain the same */}
       <Modal visible={showFinishModal} transparent={true} animationType="slide" onRequestClose={() => setShowFinishModal(false)}>
-        <View style={styles.modalOverlay}><View style={styles.modalContent}><View style={styles.modalHeader}><Text style={styles.modalTitle}>إنهاء الجلسة {exercise.currentSession}</Text><TouchableOpacity onPress={() => setShowFinishModal(false)}><X size={24} color="#6b7280" /></TouchableOpacity></View><View style={styles.inputContainer}><Text style={styles.inputLabel}>الوزن (كيلو)</Text><TextInput style={styles.input} value={weight} onChangeText={setWeight} keyboardType="numeric" placeholder="20" /></View><View style={styles.inputContainer}><Text style={styles.inputLabel}>عدد العدات</Text><TextInput style={styles.input} value={reps} onChangeText={setReps} keyboardType="numeric" placeholder="10" /></View><View style={styles.difficultyContainer}><Text style={styles.inputLabel}>تقييم الصعوبة</Text><View style={styles.difficultyGrid}>{(['very-easy', 'easy', 'medium', 'hard', 'very-hard'] as DifficultyLevel[]).map((difficulty) => (<TouchableOpacity key={difficulty} style={[styles.difficultyButton, selectedDifficulty === difficulty && { borderColor: getDifficultyColor(difficulty), backgroundColor: getDifficultyColor(difficulty)+'20' }]} onPress={() => setSelectedDifficulty(difficulty)}><Text style={styles.difficultyEmoji}>{DIFFICULTY_EMOJIS[difficulty]}</Text><Text style={styles.difficultyLabel}>{DIFFICULTY_LABELS[difficulty]}</Text></TouchableOpacity>))}</View></View><TouchableOpacity style={[styles.submitButton, { backgroundColor: settings.primaryColor }]} onPress={handleFinishSubmit}><Text style={styles.submitButtonText}>حفظ وإنهاء</Text></TouchableOpacity></View></View>
+        <View style={styles.modalOverlay}><View style={styles.modalContent}><View style={styles.modalHeader}><Text style={styles.modalTitle}>إنهاء الجلسة {exercise.currentSession}</Text><TouchableOpacity onPress={() => setShowFinishModal(false)}><X size={24} color="#6b7280" /></TouchableOpacity></View><View style={styles.inputContainer}><Text style={styles.inputLabel}>الوزن (كيلو)</Text><TextInput style={styles.input} value={weight} onChangeText={setWeight} keyboardType="numeric" placeholder="20" /></View><View style={styles.inputContainer}><Text style={styles.inputLabel}>عدد العدات</Text><TextInput style={styles.input} value={reps} onChangeText={setReps} keyboardType="numeric" placeholder="10" /></View><View style={styles.difficultyContainer}><Text style={styles.inputLabel}>تقييم الصعوبة</Text><View style={styles.difficultyGrid}>{(['very-easy', 'easy', 'medium', 'hard', 'very-hard'] as DifficultyLevel[]).map((difficulty) => (<TouchableOpacity key={difficulty} style={[styles.difficultyButton, selectedDifficulty === difficulty && { borderColor: getDifficultyColor(difficulty), backgroundColor: getDifficultyColor(difficulty)+'20' }]} onPress={() => setSelectedDifficulty(difficulty)}><Text style={styles.difficultyEmoji}>{DIFFICULTY_EMOJIS[difficulty]}</Text><Text style={styles.difficultyLabel}>{DIFFICULTY_LABELS[difficulty]}</Text></TouchableOpacity>))}</View></View>
+            <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>سبب إطالة الراحة (اختياري)</Text>
+                <View style={styles.predefinedReasonsContainer}>
+                    {PREDEFINED_REASONS.map(reason => (
+                        <TouchableOpacity key={reason} style={[styles.reasonButton, restReason === reason && { backgroundColor: settings.secondaryColor }]} onPress={() => setRestReason(reason)}>
+                            <Text style={[styles.reasonButtonText, restReason === reason && { color: 'white' }]}>{reason}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+                <TextInput style={styles.input} value={restReason} onChangeText={setRestReason} placeholder="أو أدخل سببًا آخر..." />
+            </View>
+        <TouchableOpacity style={[styles.submitButton, { backgroundColor: settings.primaryColor }]} onPress={handleFinishSubmit}><Text style={styles.submitButtonText}>حفظ وإنهاء</Text></TouchableOpacity></View></View>
       </Modal>
       <Modal visible={showSessionModal} transparent={true} animationType="fade" onRequestClose={() => setShowSessionModal(false)}>
         <View style={styles.modalOverlay}><View style={styles.sessionModalContent}>{selectedSession && exercise.sessionData[selectedSession] && (<><View style={styles.modalHeader}><Text style={styles.modalTitle}>تفاصيل الجلسة {selectedSession}</Text><TouchableOpacity onPress={() => setShowSessionModal(false)}><X size={24} color="#6b7280" /></TouchableOpacity></View><View style={styles.sessionDetailContainer}><View style={styles.sessionDetailRow}><Text style={styles.sessionDetailLabel}>الوزن:</Text><Text style={styles.sessionDetailValue}>{exercise.sessionData[selectedSession].weight} كيلو</Text></View><View style={styles.sessionDetailRow}><Text style={styles.sessionDetailLabel}>العدات:</Text><Text style={styles.sessionDetailValue}>{exercise.sessionData[selectedSession].reps} عدة</Text></View><View style={styles.sessionDetailRow}><Text style={styles.sessionDetailLabel}>الصعوبة:</Text><View style={styles.difficultyDisplay}><Text style={styles.sessionDetailValue}>{DIFFICULTY_LABELS[exercise.sessionData[selectedSession].difficulty]}</Text><Text style={styles.sessionDetailEmoji}>{DIFFICULTY_EMOJIS[exercise.sessionData[selectedSession].difficulty]}</Text></View></View></View></>)}</View></View>
@@ -233,6 +250,9 @@ const styles = StyleSheet.create({
   difficultyButton: { flex: 1, minWidth: '30%', borderWidth: 2, borderColor: '#e5e7eb', borderRadius: 8, padding: 8, alignItems: 'center', gap: 4 },
   difficultyEmoji: { fontSize: 20 },
   difficultyLabel: { fontSize: 10, fontWeight: '600', color: '#6b7280' },
+  predefinedReasonsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  reasonButton: { backgroundColor: '#f3f4f6', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#d1d5db' },
+  reasonButtonText: { fontSize: 12, fontWeight: '600', color: '#374151' },
   submitButton: { padding: 14, borderRadius: 8, alignItems: 'center' },
   submitButtonText: { color: 'white', fontSize: 16, fontWeight: '700' },
   sessionDetailContainer: { gap: 12 },
