@@ -772,6 +772,31 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     });
   }, [state.trainingPlans, updateState]);
 
+  // Planned workout management
+  const addPlannedWorkout = useCallback((date: string, planId: number) => {
+    const plan = state.trainingPlans.find(p => p.id === planId);
+    if (!plan) return;
+
+    const newPlannedWorkout = {
+      id: state.nextPlannedWorkoutId,
+      date,
+      planId,
+      planName: plan.name,
+    };
+
+    updateState({
+      plannedWorkouts: [...state.plannedWorkouts, newPlannedWorkout],
+      nextPlannedWorkoutId: state.nextPlannedWorkoutId + 1,
+    });
+  }, [state.trainingPlans, state.plannedWorkouts, state.nextPlannedWorkoutId, updateState]);
+
+  const deletePlannedWorkout = useCallback((date: string, planId: number) => {
+    const updatedPlannedWorkouts = state.plannedWorkouts.filter(
+      pw => !(pw.date === date && pw.planId === planId)
+    );
+    updateState({ plannedWorkouts: updatedPlannedWorkouts });
+  }, [state.plannedWorkouts, updateState]);
+
   // Notification management
   const addNotification = useCallback((notification: Omit<Notification, 'id'>) => {
     const newNotification: Notification = {
@@ -856,6 +881,8 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     deleteTrainingPlan,
     activateTrainingPlan,
     deactivateAllPlans,
+    addPlannedWorkout,
+    deletePlannedWorkout,
     
     // Notification management
     addNotification,

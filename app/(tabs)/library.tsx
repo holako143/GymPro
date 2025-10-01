@@ -14,8 +14,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitnessStore } from '@/hooks/useFitnessStore';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
-import { Plus, Edit, Trash2, X, Dumbbell, Search, Play, CheckCircle } from 'lucide-react-native';
-import { MUSCLE_GROUPS, Exercise, TrainingPlan } from '@/types/fitness';
+import { Plus, Edit, Trash2, X, Dumbbell, Search, Play, CheckCircle, ArrowUp, ArrowDown, Minus } from 'lucide-react-native';
+import { MUSCLE_GROUPS, Exercise, TrainingPlan, SessionHistory, SessionData } from '@/types/fitness';
 import { EXERCISE_DATABASE, getDifficultyLabel, getEquipmentLabel, ExerciseTemplate } from '@/constants/exerciseDatabase';
 
 // Configure Calendar for Arabic
@@ -84,16 +84,61 @@ const ExercisesView = () => {
 
 // AnalyticsView Component
 const AnalyticsView = () => {
-    const { sessionHistory, exercises, formatTime, trainingPlans, settings } = useFitnessStore();
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const { sessionHistory, exercises, formatTime, trainingPlans, addPlannedWorkout, settings } = useFitnessStore();
+    const [selectedDate, setSelectedDate] = useState<string | null>(null);
+    const [isPlanModalVisible, setPlanModalVisible] = useState(false);
+    const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
     const [compareMuscle, setCompareMuscle] = useState<string | null>(null);
     const [sessionAId, setSessionAId] = useState<number | null>(null);
     const [sessionBId, setSessionBId] = useState<number | null>(null);
 
+    const onDayPress = (day: { dateString: string }) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const pressedDate = new Date(day.dateString);
+        pressedDate.setHours(0, 0, 0, 0);
+
+        setSelectedDate(day.dateString);
+
+        if (pressedDate >= today) {
+            setPlanModalVisible(true);
+        }
+    };
+
+    const handlePlanWorkout = () => {
+        if (selectedDate && selectedPlanId !== null) { addPlannedWorkout(selectedDate, selectedPlanId); setPlanModalVisible(false); setSelectedPlanId(null); }
+        else { Alert.alert("خطأ", "الرجاء تحديد خطة."); }
+    };
+
+    const getSessionStats = (sessionId: number | null): SessionData[] => {
+        if (!sessionId) return [];
+        const session = sessionHistory.find(s => s.id === sessionId);
+        if (!session || !session.planId) return [];
+        const plan = trainingPlans.find(p => p.id === session.planId);
+        if (!plan) return [];
+        const relevantExercises = exercises.filter(ex => plan.exercises.includes(ex.id));
+        return relevantExercises.flatMap(ex => Object.values(ex.sessionData));
+    };
+
+    const calculateAggregateStats = (sessionData: SessionData[]) => {
+        return sessionData.reduce((acc, current) => {
+            acc.totalVolume += current.volume || 0;
+            acc.totalReps += current.reps || 0;
+            acc.totalExerciseTime += current.sessionExerciseDuration || 0;
+            acc.totalRestTime += current.sessionRestDuration || 0;
+            acc.totalWastedTime += current.wastedTime || 0;
+            return acc;
+        }, { totalVolume: 0, totalReps: 0, totalExerciseTime: 0, totalRestTime: 0, totalWastedTime: 0 });
+    };
+
+    const sessionAStats = useMemo(() => calculateAggregateStats(getSessionStats(sessionAId)), [sessionAId, exercises]);
+    const sessionBStats = useMemo(() => calculateAggregateStats(getSessionStats(sessionBId)), [sessionBId, exercises]);
+
     const markedDates = useMemo(() => {
         const markings: { [key: string]: any } = {};
-        sessionHistory.forEach(session => { const date = new Date(session.startTime).toISOString().split('T')[0]; markings[date] = { marked: true, dotColor: settings.primaryColor }; });
-        if (selectedDate) markings[selectedDate] = { ...markings[selectedDate], selected: true, selectedColor: settings.secondaryColor };
+        sessionHistory.forEach(session => { const date = new Date(session.startTime).toISOString().split('T')[0]; if (!markings[date]) markings[date] = { dots: [] }; if (!markings[date].dots.some((d: any) => d.key === 'completed')) { markings[date].dots.push({ key: 'completed', color: '#10b981' }); } });
+        // plannedWorkouts.forEach(workout => { const date = workout.date; if (!markings[date]) markings[date] = { dots: [] }; if (!markings[date].dots.some((d: any) => d.key === 'planned')) { markings[date].dots.push({ key: 'planned', color: settings.secondaryColor }); } });
+        if (selectedDate) { markings[selectedDate] = { ...markings[selectedDate], selected: true, selectedColor: settings.primaryColor }; }
         return markings;
     }, [sessionHistory, selectedDate, settings.primaryColor, settings.secondaryColor]);
 
@@ -104,6 +149,20 @@ const AnalyticsView = () => {
             return plan && plan.exercises.some(exId => exercises.find(e => e.id === exId)?.muscle === compareMuscle);
         });
     }, [compareMuscle, sessionHistory, trainingPlans, exercises]);
+
+    const renderComparisonRow = (label: string, valueA: number, valueB: number, formatter: (val: number) => string | number = val => val) => {
+        const delta = valueB - valueA;
+        const color = delta > 0 ? '#10b981' : delta < 0 ? '#ef4444' : '#6b7280';
+        const icon = delta > 0 ? <ArrowUp size={14} color={color} /> : delta < 0 ? <ArrowDown size={14} color={color} /> : <Minus size={14} color={color} />;
+        return (
+            <View style={styles.comparisonRow}>
+                <Text style={styles.comparisonLabel}>{label}</Text>
+                <Text style={styles.comparisonValue}>{formatter(valueA)}</Text>
+                <Text style={styles.comparisonValue}>{formatter(valueB)}</Text>
+                <View style={styles.comparisonDelta}><Text style={{color}}>{formatter(Math.abs(delta))}</Text>{icon}</View>
+            </View>
+        );
+    };
 
     return (
         <View style={styles.viewContainer}>
@@ -125,8 +184,18 @@ const AnalyticsView = () => {
                         </View>
                     </View>
                 )}
+                {sessionAId && sessionBId && (
+                    <View style={styles.comparisonContainer}>
+                        <View style={styles.comparisonHeaderRow}><Text style={styles.comparisonHeader}>المقياس</Text><Text style={styles.comparisonHeader}>جلسة 1</Text><Text style={styles.comparisonHeader}>جلسة 2</Text><Text style={styles.comparisonHeader}>الفرق</Text></View>
+                        {renderComparisonRow("إجمالي الحجم (كج)", sessionAStats.totalVolume, sessionBStats.totalVolume)}
+                        {renderComparisonRow("إجمالي العدات", sessionAStats.totalReps, sessionBStats.totalReps)}
+                        {renderComparisonRow("وقت التمرين", sessionAStats.totalExerciseTime, sessionBStats.totalExerciseTime, formatTime)}
+                        {renderComparisonRow("وقت الراحة", sessionAStats.totalRestTime, sessionBStats.totalRestTime, formatTime)}
+                        {renderComparisonRow("الوقت الضائع", sessionAStats.totalWastedTime, sessionBStats.totalWastedTime, formatTime)}
+                    </View>
+                )}
             </View>
-            <View style={styles.analyticsCard}><Text style={[styles.cardTitle, { color: settings.primaryColor }]}>تقويم الجلسات</Text><Calendar onDayPress={(day) => setSelectedDate(day.dateString)} markedDates={markedDates} theme={{ backgroundColor: '#ffffff', calendarBackground: '#ffffff', textSectionTitleColor: '#b6c1cd', selectedDayBackgroundColor: settings.primaryColor, selectedDayTextColor: '#ffffff', todayTextColor: settings.primaryColor, dayTextColor: '#2d4150', arrowColor: settings.primaryColor, monthTextColor: settings.primaryColor }} style={styles.calendar} /></View>
+            <View style={styles.analyticsCard}><Text style={[styles.cardTitle, { color: settings.primaryColor }]}>تقويم الجلسات</Text><Calendar onDayPress={onDayPress} markedDates={markedDates} markingType={'multi-dot'} theme={{ backgroundColor: '#ffffff', calendarBackground: '#ffffff', textSectionTitleColor: '#b6c1cd', selectedDayBackgroundColor: settings.primaryColor, selectedDayTextColor: '#ffffff', todayTextColor: settings.primaryColor, dayTextColor: '#2d4150', arrowColor: settings.primaryColor, monthTextColor: settings.primaryColor }} style={styles.calendar} /></View>
         </View>
     );
 };
@@ -265,4 +334,8 @@ const styles = StyleSheet.create({
     comparisonLabel: { flex: 1, fontWeight: '600' },
     comparisonValue: { flex: 1, textAlign: 'center' },
     comparisonDelta: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4 },
+    legendContainer: { flexDirection: 'row', justifyContent: 'center', gap: 16, marginTop: 8 },
+    legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    legendIndicator: { width: 10, height: 10, borderRadius: 5 },
+    legendText: { fontSize: 12, color: '#6b7280' },
 });
