@@ -17,6 +17,12 @@ export interface Exercise {
   audioAlertTriggered: boolean;
   isRestPaused: boolean;
   restStartTime: number | null;
+  personalRecords?: PersonalRecords;
+}
+
+export interface PersonalRecords {
+  bestWeight?: { value: number; date: string };
+  bestVolume?: { value: number; date: string };
 }
 
 export interface SessionData {

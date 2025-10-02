@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Animated } from 'react-native';
 import { Exercise, DIFFICULTY_EMOJIS, DifficultyLevel, DIFFICULTY_LABELS } from '@/types/fitness';
 import { useFitnessStore } from '@/hooks/useFitnessStore';
-import { Play, Pause, Check, X } from 'lucide-react-native';
+import { Play, Pause, Check, X, Award } from 'lucide-react-native';
 
 interface ExerciseCardProps {
   exercise: Exercise;
@@ -189,6 +189,29 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
         </View>
       </View>
 
+      {exercise.personalRecords && (
+        <View style={styles.prContainer}>
+          <View style={styles.prHeader}>
+            <Award size={18} color={settings.primaryColor} />
+            <Text style={styles.prTitle}>الأرقام القياسية</Text>
+          </View>
+          <View style={styles.prGrid}>
+            {exercise.personalRecords.bestWeight && (
+              <View style={styles.prItem}>
+                <Text style={styles.prValue}>{exercise.personalRecords.bestWeight.value} kg</Text>
+                <Text style={styles.prLabel}>أفضل وزن</Text>
+              </View>
+            )}
+            {exercise.personalRecords.bestVolume && (
+              <View style={styles.prItem}>
+                <Text style={styles.prValue}>{exercise.personalRecords.bestVolume.value}</Text>
+                <Text style={styles.prLabel}>أفضل حجم</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      )}
+
       {/* Modals remain the same */}
       <Modal visible={showFinishModal} transparent={true} animationType="slide" onRequestClose={() => setShowFinishModal(false)}>
         <View style={styles.modalOverlay}><View style={styles.modalContent}><View style={styles.modalHeader}><Text style={styles.modalTitle}>إنهاء الجلسة {exercise.currentSession}</Text><TouchableOpacity onPress={() => setShowFinishModal(false)}><X size={24} color="#6b7280" /></TouchableOpacity></View><View style={styles.inputContainer}><Text style={styles.inputLabel}>الوزن (كيلو)</Text><TextInput style={styles.input} value={weight} onChangeText={setWeight} keyboardType="numeric" placeholder="20" /></View><View style={styles.inputContainer}><Text style={styles.inputLabel}>عدد العدات</Text><TextInput style={styles.input} value={reps} onChangeText={setReps} keyboardType="numeric" placeholder="10" /></View><View style={styles.difficultyContainer}><Text style={styles.inputLabel}>تقييم الصعوبة</Text><View style={styles.difficultyGrid}>{(['very-easy', 'easy', 'medium', 'hard', 'very-hard'] as DifficultyLevel[]).map((difficulty) => (<TouchableOpacity key={difficulty} style={[styles.difficultyButton, selectedDifficulty === difficulty && { borderColor: getDifficultyColor(difficulty), backgroundColor: getDifficultyColor(difficulty)+'20' }]} onPress={() => setSelectedDifficulty(difficulty)}><Text style={styles.difficultyEmoji}>{DIFFICULTY_EMOJIS[difficulty]}</Text><Text style={styles.difficultyLabel}>{DIFFICULTY_LABELS[difficulty]}</Text></TouchableOpacity>))}</View></View>
@@ -261,4 +284,11 @@ const styles = StyleSheet.create({
   sessionDetailValue: { fontSize: 14, fontWeight: '700', color: '#111827' },
   difficultyDisplay: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sessionDetailEmoji: { fontSize: 16 },
+  prContainer: { marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  prHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  prTitle: { fontSize: 14, fontWeight: '700', color: '#374151' },
+  prGrid: { flexDirection: 'row', justifyContent: 'space-around', gap: 8 },
+  prItem: { flex: 1, backgroundColor: '#f8fafc', padding: 10, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#e5e7eb' },
+  prValue: { fontSize: 16, fontWeight: 'bold', color: '#111827', marginBottom: 2 },
+  prLabel: { fontSize: 11, color: '#6b7280' },
 });

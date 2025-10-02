@@ -507,10 +507,19 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     const completedSessions = exercise.completedSessions + 1;
     const isCompleted = completedSessions === exercise.sessions;
 
+    const newPersonalRecords = { ...(exercise.personalRecords || {}) };
+    if (!newPersonalRecords.bestWeight || sessionData.weight > newPersonalRecords.bestWeight.value) {
+        newPersonalRecords.bestWeight = { value: sessionData.weight, date: now };
+    }
+    if (!newPersonalRecords.bestVolume || sessionData.volume > newPersonalRecords.bestVolume.value) {
+        newPersonalRecords.bestVolume = { value: sessionData.volume, date: now };
+    }
+
     let updates: Partial<Exercise> = {
       completedSessions,
       sessionData: updatedSessionData,
       difficulty,
+      personalRecords: newPersonalRecords,
       exerciseSecondsCurrentSession: 0,
       restSecondsCurrentSession: 0,
       wastedTimeSeconds: 0,
