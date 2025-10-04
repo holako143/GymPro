@@ -111,7 +111,7 @@ const AnalyticsView = () => {
         else { Alert.alert("خطأ", "الرجاء تحديد خطة."); }
     };
 
-    const getSessionStats = (sessionId: number | null): SessionData[] => {
+    const getSessionStats = useCallback((sessionId: number | null): SessionData[] => {
         if (!sessionId) return [];
         const session = sessionHistory.find(s => s.id === sessionId);
         if (!session || !session.planId) return [];
@@ -119,9 +119,9 @@ const AnalyticsView = () => {
         if (!plan) return [];
         const relevantExercises = exercises.filter(ex => plan.exercises.includes(ex.id));
         return relevantExercises.flatMap(ex => Object.values(ex.sessionData));
-    };
+    }, [sessionHistory, trainingPlans, exercises]);
 
-    const calculateAggregateStats = (sessionData: SessionData[]) => {
+    const calculateAggregateStats = useCallback((sessionData: SessionData[]) => {
         return sessionData.reduce((acc, current) => {
             acc.totalVolume += current.volume || 0;
             acc.totalReps += current.reps || 0;
@@ -130,10 +130,10 @@ const AnalyticsView = () => {
             acc.totalWastedTime += current.wastedTime || 0;
             return acc;
         }, { totalVolume: 0, totalReps: 0, totalExerciseTime: 0, totalRestTime: 0, totalWastedTime: 0 });
-    };
+    }, []);
 
-    const sessionAStats = useMemo(() => calculateAggregateStats(getSessionStats(sessionAId)), [sessionAId, exercises]);
-    const sessionBStats = useMemo(() => calculateAggregateStats(getSessionStats(sessionBId)), [sessionBId, exercises]);
+    const sessionAStats = useMemo(() => calculateAggregateStats(getSessionStats(sessionAId)), [sessionAId, getSessionStats, calculateAggregateStats]);
+    const sessionBStats = useMemo(() => calculateAggregateStats(getSessionStats(sessionBId)), [sessionBId, getSessionStats, calculateAggregateStats]);
 
     const markedDates = useMemo(() => {
         const markings: { [key: string]: any } = {};
