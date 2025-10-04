@@ -73,6 +73,14 @@ export interface SessionHistory {
   exercisesCompleted: number;
 }
 
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  unlocked: boolean;
+  dateUnlocked?: string;
+}
+
 export interface AppSettings {
   primaryColor: string;
   secondaryColor: string;
@@ -89,6 +97,7 @@ export interface AppState {
   notifications: Notification[];
   plannedWorkouts: PlannedWorkout[];
   sessionHistory: SessionHistory[];
+  achievements: Achievement[];
   currentGlobalSession: SessionHistory | null;
   totalExerciseTime: number;
   totalRestTime: number;
