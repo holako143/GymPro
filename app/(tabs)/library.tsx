@@ -14,10 +14,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitnessStore } from '@/hooks/useFitnessStore';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
-import { Plus, Edit, Trash2, X, Dumbbell, Search, Play, CheckCircle, ArrowUp, ArrowDown, Minus, Award } from 'lucide-react-native';
-import { MUSCLE_GROUPS, Exercise, TrainingPlan, SessionHistory, SessionData, Achievement } from '@/types/fitness';
+import { Plus, Edit, Trash2, X, Dumbbell, Search, Play, CheckCircle, ArrowUp, ArrowDown, Minus } from 'lucide-react-native';
+import { MUSCLE_GROUPS, Exercise, TrainingPlan, SessionHistory, SessionData } from '@/types/fitness';
 import { EXERCISE_DATABASE, getDifficultyLabel, getEquipmentLabel, ExerciseTemplate } from '@/constants/exerciseDatabase';
-import { ACHIEVEMENT_LIST } from '@/constants/achievements';
 
 // Configure Calendar for Arabic
 LocaleConfig.locales['ar'] = {
@@ -85,7 +84,7 @@ const ExercisesView = () => {
 
 // AnalyticsView Component
 const AnalyticsView = () => {
-    const { sessionHistory, exercises, formatTime, trainingPlans, addPlannedWorkout, settings, achievements } = useFitnessStore();
+    const { sessionHistory, exercises, formatTime, trainingPlans, addPlannedWorkout, settings } = useFitnessStore();
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
     const [isPlanModalVisible, setPlanModalVisible] = useState(false);
     const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
@@ -165,17 +164,6 @@ const AnalyticsView = () => {
         );
     };
 
-    const mergedAchievements = useMemo(() => {
-        return ACHIEVEMENT_LIST.map(template => {
-            const unlockedInfo = achievements.find(a => a.id === template.id);
-            return {
-                ...template,
-                unlocked: !!unlockedInfo,
-                dateUnlocked: unlockedInfo?.dateUnlocked,
-            };
-        });
-    }, [achievements]);
-
     return (
         <View style={styles.viewContainer}>
             <View style={styles.analyticsCard}>
@@ -206,23 +194,6 @@ const AnalyticsView = () => {
                         {renderComparisonRow("الوقت الضائع", sessionAStats.totalWastedTime, sessionBStats.totalWastedTime, formatTime)}
                     </View>
                 )}
-            </View>
-            <View style={styles.analyticsCard}>
-                <Text style={[styles.cardTitle, { color: settings.primaryColor }]}>الإنجازات</Text>
-                <View style={styles.achievementsGrid}>
-                    {mergedAchievements.map((ach) => (
-                        <View key={ach.id} style={[styles.achievementItem, !ach.unlocked && styles.achievementLocked]}>
-                            <Award size={32} color={ach.unlocked ? '#f59e0b' : '#9ca3af'} />
-                            <Text style={[styles.achievementTitle, !ach.unlocked && styles.achievementTitleLocked]}>{ach.title}</Text>
-                            <Text style={[styles.achievementDescription, !ach.unlocked && styles.achievementDescriptionLocked]}>{ach.description}</Text>
-                            {ach.unlocked && ach.dateUnlocked && (
-                                <Text style={styles.achievementDate}>
-                                    {new Date(ach.dateUnlocked).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
-                                </Text>
-                            )}
-                        </View>
-                    ))}
-                </View>
             </View>
             <View style={styles.analyticsCard}><Text style={[styles.cardTitle, { color: settings.primaryColor }]}>تقويم الجلسات</Text><Calendar onDayPress={onDayPress} markedDates={markedDates} markingType={'multi-dot'} theme={{ backgroundColor: '#ffffff', calendarBackground: '#ffffff', textSectionTitleColor: '#b6c1cd', selectedDayBackgroundColor: settings.primaryColor, selectedDayTextColor: '#ffffff', todayTextColor: settings.primaryColor, dayTextColor: '#2d4150', arrowColor: settings.primaryColor, monthTextColor: settings.primaryColor }} style={styles.calendar} /></View>
         </View>
