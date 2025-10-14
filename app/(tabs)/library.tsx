@@ -338,49 +338,4 @@ const styles = StyleSheet.create({
     legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     legendIndicator: { width: 10, height: 10, borderRadius: 5 },
     legendText: { fontSize: 12, color: '#6b7280' },
-    achievementsGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
-        gap: 12,
-    },
-    achievementItem: {
-        width: '48%',
-        backgroundColor: '#fefce8',
-        borderRadius: 12,
-        padding: 12,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#facc15',
-    },
-    achievementLocked: {
-        backgroundColor: '#f8fafc',
-        borderColor: '#e5e7eb',
-    },
-    achievementTitle: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        color: '#a16207',
-        marginTop: 8,
-        textAlign: 'center',
-    },
-    achievementTitleLocked: {
-        color: '#6b7280',
-    },
-    achievementDescription: {
-        fontSize: 11,
-        color: '#ca8a04',
-        textAlign: 'center',
-        marginTop: 4,
-        minHeight: 33,
-    },
-    achievementDescriptionLocked: {
-        color: '#9ca3af',
-    },
-    achievementDate: {
-        fontSize: 10,
-        color: '#a16207',
-        marginTop: 8,
-        fontWeight: '600',
-    },
 });
