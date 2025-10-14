@@ -88,6 +88,7 @@ const AnalyticsView = () => {
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
     const [isPlanModalVisible, setPlanModalVisible] = useState(false);
     const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
+    const [sessionsOnSelectedDate, setSessionsOnSelectedDate] = useState<SessionHistory[]>([]);
 
     const onDayPress = (day: { dateString: string }) => {
         const today = new Date();
@@ -96,6 +97,14 @@ const AnalyticsView = () => {
         pressedDate.setHours(0, 0, 0, 0);
 
         setSelectedDate(day.dateString);
+
+        const sessions = sessionHistory.filter(s => {
+            const sessionDate = new Date(s.startTime);
+            return sessionDate.getFullYear() === pressedDate.getFullYear() &&
+                   sessionDate.getMonth() === pressedDate.getMonth() &&
+                   sessionDate.getDate() === pressedDate.getDate();
+        });
+        setSessionsOnSelectedDate(sessions);
 
         if (pressedDate >= today) {
             setPlanModalVisible(true);
@@ -151,6 +160,19 @@ const AnalyticsView = () => {
                     style={styles.calendar}
                 />
             </View>
+
+            {sessionsOnSelectedDate.length > 0 && (
+                <View style={styles.sessionsListContainer}>
+                    {sessionsOnSelectedDate.map(session => (
+                        <View key={session.id} style={styles.sessionCard}>
+                            <Text style={styles.sessionPlanName}>{session.planName}</Text>
+                            <Text style={styles.sessionTime}>
+                                {new Date(session.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })} - {session.endTime ? new Date(session.endTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : 'مستمر'}
+                            </Text>
+                        </View>
+                    ))}
+                </View>
+            )}
         </View>
     );
 };
@@ -272,4 +294,5 @@ const styles = StyleSheet.create({
     exerciseSelectItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
     exerciseSelectItemSelected: { backgroundColor: '#eff6ff' }, exerciseSelectInfo: { flex: 1 }, exerciseSelectName: { fontSize: 14, fontWeight: '600', color: '#111827', marginBottom: 2 },
     exerciseSelectMuscle: { fontSize: 12, color: '#6b7280' },
+    sessionsListContainer: { marginTop: 16 },
 });
