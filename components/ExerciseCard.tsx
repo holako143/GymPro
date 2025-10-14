@@ -25,11 +25,14 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
   const [weight, setWeight] = useState<string>('20');
   const [reps, setReps] = useState<string>('10');
   const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyLevel>('medium');
+  const [restReason, setRestReason] = useState<string>('');
 
   // Animation refs
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const buttonPressAnim = useRef(new Animated.Value(1)).current;
+
+  const PREDEFINED_REASONS = ["انتظار المعدات", "حديث اجتماعي", "تعب شديد", "تمرين شاق"];
 
   const getDifficultyColor = (difficulty: string | null) => {
     const colors = { 'very-easy': '#4ade80', 'easy': '#a3e635', 'medium': '#f59e0b', 'hard': '#ef4444', 'very-hard': '#b91c1c' };
@@ -68,9 +71,6 @@ export default function ExerciseCard({ exercise, isActive }: ExerciseCardProps) 
         break;
     }
   };
-
-  const [restReason, setRestReason] = useState<string>('');
-  const PREDEFINED_REASONS = ["انتظار المعدات", "حديث اجتماعي", "تعب شديد", "تمرين شاق"];
 
   const handleFinishSubmit = () => {
     const weightNum = parseFloat(weight) || 20;

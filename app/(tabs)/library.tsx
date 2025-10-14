@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { Plus, Edit, Trash2, X, Dumbbell, Search, Play, CheckCircle, ArrowUp, ArrowDown, Minus, Award } from 'lucide-react-native';
 import { MUSCLE_GROUPS, Exercise, TrainingPlan, SessionHistory, SessionData } from '@/types/fitness';
 import { EXERCISE_DATABASE, getDifficultyLabel, getEquipmentLabel, ExerciseTemplate } from '@/constants/exerciseDatabase';
+import { ACHIEVEMENT_LIST } from '@/constants/achievements';
 
 // Configure Calendar for Arabic
 LocaleConfig.locales['ar'] = {
@@ -84,10 +85,13 @@ const ExercisesView = () => {
 
 // AnalyticsView Component
 const AnalyticsView = () => {
-    const { sessionHistory, addPlannedWorkout, settings } = useFitnessStore();
+    const { sessionHistory, exercises, formatTime, trainingPlans, addPlannedWorkout, settings, calculateWorkoutEfficiency, achievements } = useFitnessStore();
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
     const [isPlanModalVisible, setPlanModalVisible] = useState(false);
     const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
+    const [compareMuscle, setCompareMuscle] = useState<string | null>(null);
+    const [sessionAId, setSessionAId] = useState<number | null>(null);
+    const [sessionBId, setSessionBId] = useState<number | null>(null);
     const [sessionsOnSelectedDate, setSessionsOnSelectedDate] = useState<SessionHistory[]>([]);
 
     const onDayPress = (day: { dateString: string }) => {
@@ -112,14 +116,33 @@ const AnalyticsView = () => {
     };
 
     const handlePlanWorkout = () => {
-        if (selectedDate && selectedPlanId !== null) {
-            addPlannedWorkout(selectedDate, selectedPlanId);
-            setPlanModalVisible(false);
-            setSelectedPlanId(null);
-        } else {
-            Alert.alert("خطأ", "الرجاء تحديد خطة.");
-        }
+        if (selectedDate && selectedPlanId !== null) { addPlannedWorkout(selectedDate, selectedPlanId); setPlanModalVisible(false); setSelectedPlanId(null); }
+        else { Alert.alert("خطأ", "الرجاء تحديد خطة."); }
     };
+
+    const getSessionStats = useCallback((sessionId: number | null): SessionData[] => {
+        if (!sessionId) return [];
+        const session = sessionHistory.find(s => s.id === sessionId);
+        if (!session || !session.planId) return [];
+        const plan = trainingPlans.find(p => p.id === session.planId);
+        if (!plan) return [];
+        const relevantExercises = exercises.filter(ex => plan.exercises.includes(ex.id));
+        return relevantExercises.flatMap(ex => Object.values(ex.sessionData));
+    }, [sessionHistory, trainingPlans, exercises]);
+
+    const calculateAggregateStats = useCallback((sessionData: SessionData[]) => {
+        return sessionData.reduce((acc, current) => {
+            acc.totalVolume += current.volume || 0;
+            acc.totalReps += current.reps || 0;
+            acc.totalExerciseTime += current.sessionExerciseDuration || 0;
+            acc.totalRestTime += current.sessionRestDuration || 0;
+            acc.totalWastedTime += current.wastedTime || 0;
+            return acc;
+        }, { totalVolume: 0, totalReps: 0, totalExerciseTime: 0, totalRestTime: 0, totalWastedTime: 0 });
+    }, []);
+
+    const sessionAStats = useMemo(() => calculateAggregateStats(getSessionStats(sessionAId)), [sessionAId, getSessionStats, calculateAggregateStats]);
+    const sessionBStats = useMemo(() => calculateAggregateStats(getSessionStats(sessionBId)), [sessionBId, getSessionStats, calculateAggregateStats]);
 
     const markedDates = useMemo(() => {
         const markings: { [key: string]: any } = {};
@@ -138,8 +161,193 @@ const AnalyticsView = () => {
         return markings;
     }, [sessionHistory, selectedDate, settings.primaryColor]);
 
+    const sessionsForMuscle = useMemo(() => {
+        if (!compareMuscle) return [];
+        return sessionHistory.filter(session => {
+            const plan = trainingPlans.find(p => p.id === session.planId);
+            return plan && plan.exercises.some(exId => exercises.find(e => e.id === exId)?.muscle === compareMuscle);
+        });
+    }, [compareMuscle, sessionHistory, trainingPlans, exercises]);
+
+    const renderComparisonRow = (label: string, valueA: number, valueB: number, formatter: (val: number) => string | number = val => val) => {
+        const delta = valueB - valueA;
+        const color = delta > 0 ? '#10b981' : delta < 0 ? '#ef4444' : '#6b7280';
+        const icon = delta > 0 ? <ArrowUp size={14} color={color} /> : delta < 0 ? <ArrowDown size={14} color={color} /> : <Minus size={14} color={color} />;
+        return (
+            <View style={styles.comparisonRow}>
+                <Text style={styles.comparisonLabel}>{label}</Text>
+                <Text style={styles.comparisonValue}>{formatter(valueA)}</Text>
+                <Text style={styles.comparisonValue}>{formatter(valueB)}</Text>
+                <View style={styles.comparisonDelta}><Text style={{color}}>{formatter(Math.abs(delta))}</Text>{icon}</View>
+            </View>
+        );
+    };
+
+    const timeUtilizationStats = useMemo(() => {
+        let totalEffectiveTime = 0;
+        let totalWastedTime = 0;
+        let totalRestTime = 0;
+        let totalSessionDuration = 0;
+        let lastSessionEfficiency = 0;
+
+        const allSessions = exercises.flatMap(ex => Object.values(ex.sessionData));
+
+        allSessions.forEach(session => {
+            totalEffectiveTime += session.sessionExerciseDuration || 0;
+            totalWastedTime += session.wastedTime || 0;
+            totalRestTime += session.sessionRestDuration || 0;
+        });
+
+        if (allSessions.length > 0) {
+            const lastSession = allSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+            lastSessionEfficiency = calculateWorkoutEfficiency(lastSession);
+        }
+
+        sessionHistory.forEach(session => {
+            if (session.startTime && session.endTime) {
+                totalSessionDuration += new Date(session.endTime).getTime() - new Date(session.startTime).getTime();
+            }
+        });
+
+        totalSessionDuration = totalSessionDuration / 1000; // to seconds
+
+        const timeEfficiency = totalSessionDuration > 0 ? (totalEffectiveTime / totalSessionDuration) * 100 : 0;
+
+        let level = 'Bronze';
+        let message = "بداية جيدة، استمر!";
+        let color = '#cd7f32';
+        if (timeEfficiency >= 75) {
+            level = 'Gold';
+            message = "أداء مذهل، أنت في القمة!";
+            color = '#ffd700';
+        } else if (timeEfficiency >= 50) {
+            level = 'Silver';
+            message = "عمل رائع، تقدم ملحوظ!";
+            color = '#c0c0c0';
+        }
+
+        return {
+            timeEfficiency: Math.round(timeEfficiency),
+            cumulativeWastedTime: totalWastedTime,
+            totalEffectiveTime,
+            totalRestTime,
+            lastSessionEfficiency,
+            level,
+            message,
+            color,
+        };
+    }, [exercises, sessionHistory, calculateWorkoutEfficiency]);
+
+    const mergedAchievements = useMemo(() => {
+        return ACHIEVEMENT_LIST.map(template => {
+            const unlockedInfo = achievements.find(a => a.id === template.id);
+            return {
+                ...template,
+                unlocked: !!unlockedInfo,
+                dateUnlocked: unlockedInfo?.dateUnlocked,
+            };
+        });
+    }, [achievements]);
+
     return (
         <View style={styles.viewContainer}>
+            <View style={styles.analyticsCard}>
+                <Text style={[styles.cardTitle, { color: settings.primaryColor }]}>استغلال الوقت</Text>
+                <View style={styles.statsRow}>
+                    <View style={styles.statItem}>
+                        <Text style={styles.statValue}>{timeUtilizationStats.timeEfficiency}%</Text>
+                        <Text style={styles.statLabel}>كفاءة الوقت</Text>
+                    </View>
+                    <View style={styles.statItem}>
+                        <Text style={styles.statValue}>{formatTime(timeUtilizationStats.cumulativeWastedTime)}</Text>
+                        <Text style={styles.statLabel}>الوقت الضائع التراكمي</Text>
+                    </View>
+                </View>
+            </View>
+
+            <View style={[styles.analyticsCard, { backgroundColor: timeUtilizationStats.color + '15' }]}>
+                <Text style={[styles.cardTitle, { color: timeUtilizationStats.color }]}>تحدي الوقت الذهبي</Text>
+                <View style={styles.challengeContainer}>
+                    <Award size={48} color={timeUtilizationStats.color} />
+                    <View style={styles.challengeTextContainer}>
+                        <Text style={[styles.challengeLevel, { color: timeUtilizationStats.color }]}>{timeUtilizationStats.level}</Text>
+                        <Text style={styles.challengeMessage}>{timeUtilizationStats.message}</Text>
+                    </View>
+                </View>
+            </View>
+
+            <View style={styles.analyticsCard}>
+                <Text style={[styles.cardTitle, { color: settings.primaryColor }]}>مسار الجلسة</Text>
+                <View style={styles.timelineContainer}>
+                    <View style={[styles.timelineBar, { flex: timeUtilizationStats.totalEffectiveTime, backgroundColor: settings.primaryColor }]} />
+                    <View style={[styles.timelineBar, { flex: timeUtilizationStats.totalRestTime, backgroundColor: '#f59e0b' }]} />
+                </View>
+                <View style={styles.legendContainer}>
+                    <View style={styles.legendItem}>
+                        <View style={[styles.legendIndicator, { backgroundColor: settings.primaryColor }]} />
+                        <Text style={styles.legendText}>وقت التمرين</Text>
+                    </View>
+                    <View style={styles.legendItem}>
+                        <View style={[styles.legendIndicator, { backgroundColor: '#f59e0b' }]} />
+                        <Text style={styles.legendText}>وقت الراحة</Text>
+                    </View>
+                </View>
+            </View>
+
+            <View style={styles.analyticsCard}>
+                <Text style={[styles.cardTitle, { color: settings.primaryColor }]}>كفاءة التمرين (آخر جلسة)</Text>
+                <View style={styles.statItem}>
+                    <Text style={styles.statValue}>{timeUtilizationStats.lastSessionEfficiency}</Text>
+                    <Text style={styles.statLabel}>حجم التمرين لكل دقيقة راحة</Text>
+                </View>
+            </View>
+
+            <View style={styles.analyticsCard}>
+                <Text style={[styles.cardTitle, { color: settings.primaryColor }]}>مقارنة أداء العضلات</Text>
+                <View style={styles.pickerContainer}>
+                    <Text style={styles.pickerLabel}>اختر مجموعة عضلية:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>{MUSCLE_GROUPS.map(m => <TouchableOpacity key={m} style={[styles.muscleChip, compareMuscle === m && styles.muscleChipSelected]} onPress={() => setCompareMuscle(m)}><Text style={[styles.muscleChipText, compareMuscle === m && styles.muscleChipTextSelected]}>{m}</Text></TouchableOpacity>)}</ScrollView>
+                </View>
+                {compareMuscle && (
+                    <View style={styles.sessionPickers}>
+                        <View style={styles.pickerContainer}>
+                            <Text style={styles.pickerLabel}>الجلسة 1 (الأقدم):</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>{sessionsForMuscle.map(s => <TouchableOpacity key={s.id} style={[styles.sessionChip, sessionAId === s.id && styles.sessionChipSelected]} onPress={() => setSessionAId(s.id)}><Text style={[styles.sessionChipText, sessionAId === s.id && styles.sessionChipTextSelected]}>{new Date(s.startTime).toLocaleDateString('ar-EG')}</Text></TouchableOpacity>)}</ScrollView>
+                        </View>
+                        <View style={styles.pickerContainer}>
+                            <Text style={styles.pickerLabel}>الجلسة 2 (الأحدث):</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>{sessionsForMuscle.map(s => <TouchableOpacity key={s.id} style={[styles.sessionChip, sessionBId === s.id && styles.sessionChipSelected]} onPress={() => setSessionBId(s.id)}><Text style={[styles.sessionChipText, sessionBId === s.id && styles.sessionChipTextSelected]}>{new Date(s.startTime).toLocaleDateString('ar-EG')}</Text></TouchableOpacity>)}</ScrollView>
+                        </View>
+                    </View>
+                )}
+                {sessionAId && sessionBId && (
+                    <View style={styles.comparisonContainer}>
+                        <View style={styles.comparisonHeaderRow}><Text style={styles.comparisonHeader}>المقياس</Text><Text style={styles.comparisonHeader}>جلسة 1</Text><Text style={styles.comparisonHeader}>جلسة 2</Text><Text style={styles.comparisonHeader}>الفرق</Text></View>
+                        {renderComparisonRow("إجمالي الحجم (كج)", sessionAStats.totalVolume, sessionBStats.totalVolume)}
+                        {renderComparisonRow("إجمالي العدات", sessionAStats.totalReps, sessionBStats.totalReps)}
+                        {renderComparisonRow("وقت التمرين", sessionAStats.totalExerciseTime, sessionBStats.totalExerciseTime, formatTime)}
+                        {renderComparisonRow("وقت الراحة", sessionAStats.totalRestTime, sessionBStats.totalRestTime, formatTime)}
+                        {renderComparisonRow("الوقت الضائع", sessionAStats.totalWastedTime, sessionBStats.totalWastedTime, formatTime)}
+                    </View>
+                )}
+            </View>
+            <View style={styles.analyticsCard}>
+                <Text style={[styles.cardTitle, { color: settings.primaryColor }]}>الإنجازات</Text>
+                <View style={styles.achievementsGrid}>
+                    {mergedAchievements.map((ach) => (
+                        <View key={ach.id} style={[styles.achievementItem, !ach.unlocked && styles.achievementLocked]}>
+                            <Award size={32} color={ach.unlocked ? '#f59e0b' : '#9ca3af'} />
+                            <Text style={[styles.achievementTitle, !ach.unlocked && styles.achievementTitleLocked]}>{ach.title}</Text>
+                            <Text style={[styles.achievementDescription, !ach.unlocked && styles.achievementDescriptionLocked]}>{ach.description}</Text>
+                            {ach.unlocked && ach.dateUnlocked && (
+                                <Text style={styles.achievementDate}>
+                                    {new Date(ach.dateUnlocked).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                </Text>
+                            )}
+                        </View>
+                    ))}
+                </View>
+            </View>
             <View style={styles.analyticsCard}>
                 <Text style={[styles.cardTitle, { color: settings.primaryColor }]}>تقويم الجلسات</Text>
                 <Calendar
@@ -160,7 +368,6 @@ const AnalyticsView = () => {
                     style={styles.calendar}
                 />
             </View>
-
             {sessionsOnSelectedDate.length > 0 && (
                 <View style={styles.sessionsListContainer}>
                     {sessionsOnSelectedDate.map(session => (
@@ -295,4 +502,116 @@ const styles = StyleSheet.create({
     exerciseSelectItemSelected: { backgroundColor: '#eff6ff' }, exerciseSelectInfo: { flex: 1 }, exerciseSelectName: { fontSize: 14, fontWeight: '600', color: '#111827', marginBottom: 2 },
     exerciseSelectMuscle: { fontSize: 12, color: '#6b7280' },
     sessionsListContainer: { marginTop: 16 },
+    pickerContainer: { marginBottom: 12 }, pickerLabel: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 8 },
+    sessionPickers: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+    muscleChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e5e7eb', marginRight: 8 },
+    muscleChipSelected: { backgroundColor: '#4361ee', borderColor: '#4361ee' },
+    muscleChipText: { fontSize: 13, fontWeight: '600', color: '#374151' },
+    muscleChipTextSelected: { color: 'white' },
+    sessionChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e5e7eb', marginRight: 8 },
+    sessionChipSelected: { backgroundColor: '#3f37c9', borderColor: '#3f37c9' },
+    sessionChipText: { fontSize: 13, fontWeight: '600', color: '#374151' },
+    sessionChipTextSelected: { color: 'white' },
+    comparisonContainer: { marginTop: 16, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8 },
+    comparisonHeaderRow: { flexDirection: 'row', backgroundColor: '#f8fafc', padding: 8, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
+    comparisonHeader: { flex: 1, fontWeight: 'bold', color: '#374151', textAlign: 'center' },
+    comparisonRow: { flexDirection: 'row', padding: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+    comparisonLabel: { flex: 1, fontWeight: '600' },
+    comparisonValue: { flex: 1, textAlign: 'center' },
+    comparisonDelta: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4 },
+    legendContainer: { flexDirection: 'row', justifyContent: 'center', gap: 16, marginTop: 8 },
+    legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    legendIndicator: { width: 10, height: 10, borderRadius: 5 },
+    legendText: { fontSize: 12, color: '#6b7280' },
+    timelineContainer: {
+        flexDirection: 'row',
+        height: 20,
+        borderRadius: 10,
+        overflow: 'hidden',
+        backgroundColor: '#e5e7eb',
+        marginBottom: 12,
+    },
+    timelineBar: {
+        height: '100%',
+    },
+    statsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+    },
+    statItem: {
+        alignItems: 'center',
+        gap: 4,
+    },
+    statValue: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#1f2937',
+    },
+    statLabel: {
+        fontSize: 12,
+        color: '#6b7280',
+        fontWeight: '600',
+    },
+    challengeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+    },
+    challengeTextContainer: {
+        flex: 1,
+    },
+    challengeLevel: {
+        fontSize: 28,
+        fontWeight: 'bold',
+    },
+    challengeMessage: {
+        fontSize: 14,
+        color: '#4b5563',
+    },
+    achievementsGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        gap: 12,
+    },
+    achievementItem: {
+        width: '48%',
+        backgroundColor: '#fefce8',
+        borderRadius: 12,
+        padding: 12,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#facc15',
+    },
+    achievementLocked: {
+        backgroundColor: '#f8fafc',
+        borderColor: '#e5e7eb',
+    },
+    achievementTitle: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#a16207',
+        marginTop: 8,
+        textAlign: 'center',
+    },
+    achievementTitleLocked: {
+        color: '#6b7280',
+    },
+    achievementDescription: {
+        fontSize: 11,
+        color: '#ca8a04',
+        textAlign: 'center',
+        marginTop: 4,
+        minHeight: 33,
+    },
+    achievementDescriptionLocked: {
+        color: '#9ca3af',
+    },
+    achievementDate: {
+        fontSize: 10,
+        color: '#a16207',
+        marginTop: 8,
+        fontWeight: '600',
+    },
 });

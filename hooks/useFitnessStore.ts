@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
-import { AppState, Exercise, TrainingPlan, SessionHistory, SessionData, DifficultyLevel, AppSettings, Notification } from '@/types/fitness';
+import { AppState, Exercise, TrainingPlan, SessionHistory, SessionData, DifficultyLevel, AppSettings, Notification, Achievement } from '@/types/fitness';
+import { ACHIEVEMENTS_DATABASE, AchievementId } from '@/constants/achievements';
 
 const STORAGE_KEYS = {
   EXERCISES: 'fitnessAppExercises',
@@ -11,7 +12,8 @@ const STORAGE_KEYS = {
   SESSION_HISTORY: 'fitnessAppSessionHistory',
   ACTIVE_PLAN_ID: 'fitnessAppActivePlanId',
   SESSION_SECONDS: 'fitnessAppSessionSeconds',
-  SETTINGS: 'fitnessAppSettings'
+  SETTINGS: 'fitnessAppSettings',
+  ACHIEVEMENTS: 'fitnessAppAchievements'
 };
 
 const initialState: AppState = {
@@ -23,6 +25,7 @@ const initialState: AppState = {
   notifications: [],
   plannedWorkouts: [],
   sessionHistory: [],
+  achievements: [],
   currentGlobalSession: null,
   totalExerciseTime: 0,
   totalRestTime: 0,
@@ -58,7 +61,8 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
         savedSessionHistory,
         savedActivePlanId,
         savedSessionSeconds,
-        savedSettings
+        savedSettings,
+        savedAchievements
       ] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.EXERCISES),
         AsyncStorage.getItem(STORAGE_KEYS.PLANS),
@@ -67,7 +71,8 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
         AsyncStorage.getItem(STORAGE_KEYS.SESSION_HISTORY),
         AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_PLAN_ID),
         AsyncStorage.getItem(STORAGE_KEYS.SESSION_SECONDS),
-        AsyncStorage.getItem(STORAGE_KEYS.SETTINGS)
+        AsyncStorage.getItem(STORAGE_KEYS.SETTINGS),
+        AsyncStorage.getItem(STORAGE_KEYS.ACHIEVEMENTS)
       ]);
 
       const newState = { ...initialState };
@@ -108,6 +113,10 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
         newState.settings = { ...newState.settings, ...JSON.parse(savedSettings) };
       }
 
+      if (savedAchievements) {
+        newState.achievements = JSON.parse(savedAchievements);
+      }
+
       // Initialize with default data if empty
       if (newState.exercises.length === 0 && newState.trainingPlans.length === 0) {
         initializeDefaultData(newState);
@@ -146,7 +155,8 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
         AsyncStorage.setItem(STORAGE_KEYS.SESSION_HISTORY, JSON.stringify(newState.sessionHistory)),
         AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_PLAN_ID, newState.activePlanId?.toString() || ''),
         AsyncStorage.setItem(STORAGE_KEYS.SESSION_SECONDS, newState.sessionSeconds.toString()),
-        AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(newState.settings))
+        AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(newState.settings)),
+        AsyncStorage.setItem(STORAGE_KEYS.ACHIEVEMENTS, JSON.stringify(newState.achievements))
       ]);
     } catch (error) {
       console.error('Error saving data:', error);
@@ -239,6 +249,16 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
   const calculate1RM = useCallback((weight: number, reps: number): number => {
     if (reps === 0 || weight <= 0) return 0;
     return Math.round(weight * (1 + (reps / 30)));
+  }, []);
+
+  // Calculate Workout Efficiency
+  const calculateWorkoutEfficiency = useCallback((session: SessionData): number => {
+    const restInMinutes = session.sessionRestDuration / 60;
+    if (!restInMinutes || restInMinutes === 0) {
+      return session.volume || 0; // Return volume if rest is zero to avoid division by zero
+    }
+    const efficiency = session.volume / restInMinutes;
+    return Math.round(efficiency);
   }, []);
 
   // Play sound effect
@@ -461,7 +481,7 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     playSound('resume');
   }, [state.exercises, startExerciseTimer, playSound, updateExercise]);
 
-  const finishSession = useCallback((exerciseId: number, sessionNumber: number, weight: number, reps: number, difficulty: DifficultyLevel) => {
+  const finishSession = useCallback((exerciseId: number, sessionNumber: number, weight: number, reps: number, difficulty: DifficultyLevel, restReason?: string) => {
     const exercise = state.exercises.find(e => e.id === exerciseId);
     if (!exercise) return;
 
@@ -489,17 +509,27 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
       oneRM,
       volume,
       startTime: new Date(Date.now() - exercise.exerciseSecondsCurrentSession * 1000).toISOString(),
-      endTime: now
+      endTime: now,
+      restReason: restReason,
     };
 
     const updatedSessionData = { ...exercise.sessionData, [sessionNumber]: sessionData };
     const completedSessions = exercise.completedSessions + 1;
     const isCompleted = completedSessions === exercise.sessions;
 
+    const newPersonalRecords = { ...(exercise.personalRecords || {}) };
+    if (!newPersonalRecords.bestWeight || sessionData.weight > newPersonalRecords.bestWeight.value) {
+        newPersonalRecords.bestWeight = { value: sessionData.weight, date: now };
+    }
+    if (!newPersonalRecords.bestVolume || sessionData.volume > newPersonalRecords.bestVolume.value) {
+        newPersonalRecords.bestVolume = { value: sessionData.volume, date: now };
+    }
+
     let updates: Partial<Exercise> = {
       completedSessions,
       sessionData: updatedSessionData,
       difficulty,
+      personalRecords: newPersonalRecords,
       exerciseSecondsCurrentSession: 0,
       restSecondsCurrentSession: 0,
       wastedTimeSeconds: 0,
@@ -612,8 +642,81 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     }, 1000);
   }, [state.sessionStarted, state.nextSessionHistoryId, state.activePlanId, state.trainingPlans, updateState]);
 
+  const checkWorkoutAchievements = useCallback((completedSession: SessionHistory, allExercises: Exercise[], allSessions: SessionHistory[]) => {
+    const now = new Date();
+
+    const unlockAchievement = (achievementId: AchievementId) => {
+        const isAlreadyUnlocked = state.achievements.some(a => a.id === achievementId);
+        if (isAlreadyUnlocked) return;
+
+        const achievementData = ACHIEVEMENTS_DATABASE[achievementId];
+        if (!achievementData) return;
+
+        const newAchievement: Achievement = {
+            ...achievementData,
+            unlocked: true,
+            dateUnlocked: new Date().toISOString(),
+        };
+        updateState({ achievements: [...state.achievements, newAchievement] });
+    };
+
+    // FIRST_WORKOUT
+    if (allSessions.length >= 1) {
+      unlockAchievement('FIRST_WORKOUT');
+    }
+
+    // CONSISTENCY
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const recentSessions = allSessions.filter(s => new Date(s.startTime) > oneWeekAgo);
+    const uniqueDays = new Set(recentSessions.map(s => new Date(s.startTime).toDateString())).size;
+
+    if (uniqueDays >= 3) unlockAchievement('CONSISTENCY_BRONZE');
+    if (uniqueDays >= 5) unlockAchievement('CONSISTENCY_SILVER');
+    if (uniqueDays >= 7) unlockAchievement('CONSISTENCY_GOLD');
+
+    // PERFECT_MONTH
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const plannedWorkoutsThisMonth = state.plannedWorkouts.filter(pw => {
+        const d = new Date(pw.date);
+        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+    const completedPlannedWorkoutsThisMonth = plannedWorkoutsThisMonth.every(pw =>
+        allSessions.some(s => new Date(s.startTime).toDateString() === new Date(pw.date).toDateString() && s.endTime)
+    );
+    if (plannedWorkoutsThisMonth.length > 0 && completedPlannedWorkoutsThisMonth) {
+        unlockAchievement('PERFECT_MONTH');
+    }
+
+    // VOLUME MILESTONES
+    const totalVolume = allExercises.reduce((total, exercise) => {
+        return total + Object.values(exercise.sessionData).reduce((subTotal, data) => subTotal + (data.volume || 0), 0);
+    }, 0);
+
+    if (totalVolume >= 1000) unlockAchievement('VOLUME_MILESTONE_1');
+    if (totalVolume >= 10000) unlockAchievement('VOLUME_MILESTONE_2');
+    if (totalVolume >= 100000) unlockAchievement('VOLUME_MILESTONE_3');
+
+    // SESSION MILESTONES
+    const completedSessionsCount = allSessions.filter(s => s.endTime).length;
+    if (completedSessionsCount >= 10) unlockAchievement('SESSION_MILESTONE_1');
+    if (completedSessionsCount >= 50) unlockAchievement('SESSION_MILESTONE_2');
+    if (completedSessionsCount >= 100) unlockAchievement('SESSION_MILESTONE_3');
+
+    // CHALLENGES
+    if (completedSession.endTime) {
+        const endHour = new Date(completedSession.endTime).getHours();
+        if (endHour >= 22 || endHour < 4) {
+            unlockAchievement('CHALLENGE_NIGHT_OWL');
+        }
+        if (endHour >= 4 && endHour < 7) {
+            unlockAchievement('CHALLENGE_EARLY_BIRD');
+        }
+    }
+  }, [state.achievements, state.plannedWorkouts, updateState]);
+
   const stopGlobalSession = useCallback((reason?: string) => {
-    if (!state.sessionStarted) return;
+    if (!state.sessionStarted || !state.currentGlobalSession) return;
 
     // Clear global timer
     if (sessionTimerRef.current) {
@@ -627,15 +730,13 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
       timerMap.current.clear();
     });
 
-    // Update session history
-    const updatedSessionHistory = state.currentGlobalSession ? [
-      ...state.sessionHistory,
-      {
-        ...state.currentGlobalSession,
-        endTime: new Date().toISOString(),
-        reasonForEarlyStop: reason || null
-      }
-    ] : state.sessionHistory;
+    const completedSession: SessionHistory = {
+      ...state.currentGlobalSession,
+      endTime: new Date().toISOString(),
+      reasonForEarlyStop: reason || null,
+    };
+
+    const updatedSessionHistory = [...state.sessionHistory, completedSession];
 
     // Reset all exercises in active plan
     const updatedExercises = state.exercises.map(exercise => {
@@ -646,8 +747,6 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
           status: 'pending' as const,
           exerciseSecondsCurrentSession: 0,
           restSecondsCurrentSession: 0,
-          totalExerciseSecondsAccumulated: 0,
-          totalRestSecondsAccumulated: 0,
           wastedTimeSeconds: 0,
           completedSessions: 0,
           currentSession: 1,
@@ -668,7 +767,9 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
       sessionHistory: updatedSessionHistory,
       exercises: updatedExercises
     });
-  }, [state.sessionStarted, state.currentGlobalSession, state.sessionHistory, state.exercises, state.trainingPlans, state.activePlanId, updateState]);
+
+    checkWorkoutAchievements(completedSession, updatedExercises, updatedSessionHistory);
+  }, [state.sessionStarted, state.currentGlobalSession, state.sessionHistory, state.exercises, state.trainingPlans, state.activePlanId, updateState, checkWorkoutAchievements]);
 
   // Training plan management
   const addTrainingPlan = useCallback((plan: Omit<TrainingPlan, 'id'>) => {
@@ -677,11 +778,23 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
       id: state.nextPlanId
     };
 
+    if (state.trainingPlans.length === 0) {
+        const achievementData = ACHIEVEMENTS_DATABASE['CHALLENGE_PLAN_MASTER'];
+        if (achievementData) {
+            const newAchievement: Achievement = {
+                ...achievementData,
+                unlocked: true,
+                dateUnlocked: new Date().toISOString(),
+            };
+            updateState({ achievements: [...state.achievements, newAchievement] });
+        }
+    }
+
     updateState({
       trainingPlans: [...state.trainingPlans, newPlan],
       nextPlanId: state.nextPlanId + 1
     });
-  }, [state.trainingPlans, state.nextPlanId, updateState]);
+  }, [state.trainingPlans, state.nextPlanId, state.achievements, updateState]);
 
   const updateTrainingPlan = useCallback((id: number, updates: Partial<TrainingPlan>) => {
     const updatedPlans = state.trainingPlans.map(plan =>
@@ -761,6 +874,31 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     });
   }, [state.trainingPlans, updateState]);
 
+  // Planned workout management
+  const addPlannedWorkout = useCallback((date: string, planId: number) => {
+    const plan = state.trainingPlans.find(p => p.id === planId);
+    if (!plan) return;
+
+    const newPlannedWorkout = {
+      id: state.nextPlannedWorkoutId,
+      date,
+      planId,
+      planName: plan.name,
+    };
+
+    updateState({
+      plannedWorkouts: [...state.plannedWorkouts, newPlannedWorkout],
+      nextPlannedWorkoutId: state.nextPlannedWorkoutId + 1,
+    });
+  }, [state.trainingPlans, state.plannedWorkouts, state.nextPlannedWorkoutId, updateState]);
+
+  const deletePlannedWorkout = useCallback((date: string, planId: number) => {
+    const updatedPlannedWorkouts = state.plannedWorkouts.filter(
+      pw => !(pw.date === date && pw.planId === planId)
+    );
+    updateState({ plannedWorkouts: updatedPlannedWorkouts });
+  }, [state.plannedWorkouts, updateState]);
+
   // Notification management
   const addNotification = useCallback((notification: Omit<Notification, 'id'>) => {
     const newNotification: Notification = {
@@ -821,6 +959,7 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     // Helpers
     formatTime,
     calculate1RM,
+    calculateWorkoutEfficiency,
     playSound,
     
     // Exercise management
@@ -844,6 +983,8 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     deleteTrainingPlan,
     activateTrainingPlan,
     deactivateAllPlans,
+    addPlannedWorkout,
+    deletePlannedWorkout,
     
     // Notification management
     addNotification,
@@ -855,5 +996,5 @@ export const [FitnessProvider, useFitnessStore] = createContextHook(() => {
     
     // State updates
     updateState
-  }), [state, formatTime, calculate1RM, playSound, addExercise, updateExercise, deleteExercise, startExerciseTimer, pauseExerciseTimer, resumeExerciseTimer, finishSession, startGlobalSession, stopGlobalSession, addTrainingPlan, updateTrainingPlan, deleteTrainingPlan, activateTrainingPlan, deactivateAllPlans, addNotification, updateNotification, deleteNotification, updateSettings, updateState]);
+  }), [state, formatTime, calculate1RM, playSound, addExercise, updateExercise, deleteExercise, startExerciseTimer, pauseExerciseTimer, resumeExerciseTimer, finishSession, startGlobalSession, stopGlobalSession, addTrainingPlan, updateTrainingPlan, deleteTrainingPlan, activateTrainingPlan, deactivateAllPlans, addNotification, updateNotification, deleteNotification, updateSettings, updateState, checkWorkoutAchievements]);
 });
