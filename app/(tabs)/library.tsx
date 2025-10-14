@@ -14,7 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFitnessStore } from '@/hooks/useFitnessStore';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
-import { Plus, Edit, Trash2, X, Dumbbell, Search, Play, CheckCircle, ArrowUp, ArrowDown, Minus } from 'lucide-react-native';
+import { Plus, Edit, Trash2, X, Dumbbell, Search, Play, CheckCircle, ArrowUp, ArrowDown, Minus, Award } from 'lucide-react-native';
 import { MUSCLE_GROUPS, Exercise, TrainingPlan, SessionHistory, SessionData } from '@/types/fitness';
 import { EXERCISE_DATABASE, getDifficultyLabel, getEquipmentLabel, ExerciseTemplate } from '@/constants/exerciseDatabase';
 
@@ -84,7 +84,7 @@ const ExercisesView = () => {
 
 // AnalyticsView Component
 const AnalyticsView = () => {
-    const { sessionHistory, exercises, formatTime, trainingPlans, addPlannedWorkout, settings } = useFitnessStore();
+    const { sessionHistory, exercises, formatTime, trainingPlans, addPlannedWorkout, settings, calculateWorkoutEfficiency } = useFitnessStore();
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
     const [isPlanModalVisible, setPlanModalVisible] = useState(false);
     const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
@@ -164,8 +164,114 @@ const AnalyticsView = () => {
         );
     };
 
+    const timeUtilizationStats = useMemo(() => {
+        let totalEffectiveTime = 0;
+        let totalWastedTime = 0;
+        let totalRestTime = 0;
+        let totalSessionDuration = 0;
+        let lastSessionEfficiency = 0;
+
+        const allSessions = exercises.flatMap(ex => Object.values(ex.sessionData));
+
+        allSessions.forEach(session => {
+            totalEffectiveTime += session.sessionExerciseDuration || 0;
+            totalWastedTime += session.wastedTime || 0;
+            totalRestTime += session.sessionRestDuration || 0;
+        });
+
+        if (allSessions.length > 0) {
+            const lastSession = allSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+            lastSessionEfficiency = calculateWorkoutEfficiency(lastSession);
+        }
+
+        sessionHistory.forEach(session => {
+            if (session.startTime && session.endTime) {
+                totalSessionDuration += new Date(session.endTime).getTime() - new Date(session.startTime).getTime();
+            }
+        });
+
+        totalSessionDuration = totalSessionDuration / 1000; // to seconds
+
+        const timeEfficiency = totalSessionDuration > 0 ? (totalEffectiveTime / totalSessionDuration) * 100 : 0;
+
+        let level = 'Bronze';
+        let message = "بداية جيدة، استمر!";
+        let color = '#cd7f32';
+        if (timeEfficiency >= 75) {
+            level = 'Gold';
+            message = "أداء مذهل، أنت في القمة!";
+            color = '#ffd700';
+        } else if (timeEfficiency >= 50) {
+            level = 'Silver';
+            message = "عمل رائع، تقدم ملحوظ!";
+            color = '#c0c0c0';
+        }
+
+        return {
+            timeEfficiency: Math.round(timeEfficiency),
+            cumulativeWastedTime: totalWastedTime,
+            totalEffectiveTime,
+            totalRestTime,
+            lastSessionEfficiency,
+            level,
+            message,
+            color,
+        };
+    }, [exercises, sessionHistory, calculateWorkoutEfficiency]);
+
     return (
         <View style={styles.viewContainer}>
+            <View style={styles.analyticsCard}>
+                <Text style={[styles.cardTitle, { color: settings.primaryColor }]}>استغلال الوقت</Text>
+                <View style={styles.statsRow}>
+                    <View style={styles.statItem}>
+                        <Text style={styles.statValue}>{timeUtilizationStats.timeEfficiency}%</Text>
+                        <Text style={styles.statLabel}>كفاءة الوقت</Text>
+                    </View>
+                    <View style={styles.statItem}>
+                        <Text style={styles.statValue}>{formatTime(timeUtilizationStats.cumulativeWastedTime)}</Text>
+                        <Text style={styles.statLabel}>الوقت الضائع التراكمي</Text>
+                    </View>
+                </View>
+            </View>
+
+            <View style={[styles.analyticsCard, { backgroundColor: timeUtilizationStats.color + '15' }]}>
+                <Text style={[styles.cardTitle, { color: timeUtilizationStats.color }]}>تحدي الوقت الذهبي</Text>
+                <View style={styles.challengeContainer}>
+                    <Award size={48} color={timeUtilizationStats.color} />
+                    <View style={styles.challengeTextContainer}>
+                        <Text style={[styles.challengeLevel, { color: timeUtilizationStats.color }]}>{timeUtilizationStats.level}</Text>
+                        <Text style={styles.challengeMessage}>{timeUtilizationStats.message}</Text>
+                    </View>
+                </View>
+            </View>
+
+            <View style={styles.analyticsCard}>
+                <Text style={[styles.cardTitle, { color: settings.primaryColor }]}>مسار الجلسة</Text>
+                <View style={styles.timelineContainer}>
+                    <View style={[styles.timelineBar, { flex: timeUtilizationStats.totalEffectiveTime, backgroundColor: settings.primaryColor }]} />
+                    <View style={[styles.timelineBar, { flex: timeUtilizationStats.totalRestTime, backgroundColor: '#f59e0b' }]} />
+                </View>
+                <View style={styles.legendContainer}>
+                    <View style={styles.legendItem}>
+                        <View style={[styles.legendIndicator, { backgroundColor: settings.primaryColor }]} />
+                        <Text style={styles.legendText}>وقت التمرين</Text>
+                    </View>
+                    <View style={styles.legendItem}>
+                        <View style={[styles.legendIndicator, { backgroundColor: '#f59e0b' }]} />
+                        <Text style={styles.legendText}>وقت الراحة</Text>
+                    </View>
+                </View>
+            </View>
+
+            <View style={styles.analyticsCard}>
+                <Text style={[styles.cardTitle, { color: settings.primaryColor }]}>كفاءة التمرين (آخر جلسة)</Text>
+                <View style={styles.statItem}>
+                    <Text style={styles.statValue}>{timeUtilizationStats.lastSessionEfficiency}</Text>
+                    <Text style={styles.statLabel}>حجم التمرين لكل دقيقة راحة</Text>
+                </View>
+            </View>
+
             <View style={styles.analyticsCard}>
                 <Text style={[styles.cardTitle, { color: settings.primaryColor }]}>مقارنة أداء العضلات</Text>
                 <View style={styles.pickerContainer}>
@@ -338,4 +444,50 @@ const styles = StyleSheet.create({
     legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     legendIndicator: { width: 10, height: 10, borderRadius: 5 },
     legendText: { fontSize: 12, color: '#6b7280' },
+    timelineContainer: {
+        flexDirection: 'row',
+        height: 20,
+        borderRadius: 10,
+        overflow: 'hidden',
+        backgroundColor: '#e5e7eb',
+        marginBottom: 12,
+    },
+    timelineBar: {
+        height: '100%',
+    },
+    statsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+    },
+    statItem: {
+        alignItems: 'center',
+        gap: 4,
+    },
+    statValue: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#1f2937',
+    },
+    statLabel: {
+        fontSize: 12,
+        color: '#6b7280',
+        fontWeight: '600',
+    },
+    challengeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+    },
+    challengeTextContainer: {
+        flex: 1,
+    },
+    challengeLevel: {
+        fontSize: 28,
+        fontWeight: 'bold',
+    },
+    challengeMessage: {
+        fontSize: 14,
+        color: '#4b5563',
+    },
 });
